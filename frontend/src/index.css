@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply h-full antialiased font-sans bg-legal-cream text-legal-navy-deep transition-colors duration-200 dark:bg-legal-charcoal-dark dark:text-legal-cream;
+  }
+}
+
+/* Elegant Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #C5A880;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #B08E5B;
+}
+
+/* Premium UI Transitions & Animations */
+.premium-card {
+  @apply bg-white border border-slate-100 rounded-xl p-6 shadow-premium transition-all duration-300 hover:shadow-premium-lg hover:-translate-y-0.5 dark:bg-legal-charcoal-medium dark:border-legal-charcoal-dark;
+}
+
+.premium-btn-primary {
+  @apply bg-legal-navy-medium text-white px-5 py-2.5 rounded-lg font-medium shadow-sm transition-all duration-200 hover:bg-legal-navy-deep active:scale-95 flex items-center justify-center gap-2 border border-transparent dark:bg-legal-gold dark:text-legal-navy-deep dark:hover:bg-legal-gold-light;
+}
+
+.premium-btn-secondary {
+  @apply bg-white text-legal-navy-medium border border-slate-200 px-5 py-2.5 rounded-lg font-medium transition-all duration-200 hover:bg-slate-50 hover:border-slate-300 active:scale-95 flex items-center justify-center gap-2 dark:bg-transparent dark:text-legal-gold dark:border-legal-gold dark:hover:bg-legal-charcoal-medium;
+}
+
+.premium-btn-gold {
+  @apply bg-legal-gold text-legal-navy-deep px-5 py-2.5 rounded-lg font-semibold shadow-gold-glow transition-all duration-200 hover:bg-legal-gold-light active:scale-95 flex items-center justify-center gap-2;
+}
+
+.premium-input {
+  @apply w-full px-4 py-2.5 rounded-lg border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-legal-gold focus:border-transparent transition-all duration-200 dark:bg-legal-charcoal-dark dark:border-slate-800 dark:text-slate-200 dark:focus:ring-legal-gold;
+}
+
+/* Luxury timeline indicators */
+.timeline-pill {
+  @apply relative pl-8 before:content-[''] before:absolute before:left-[11px] before:top-2 before:bottom-0 before:w-0.5 before:bg-legal-gold/20 last:before:hidden;
+}
+
+.timeline-dot {
+  @apply absolute left-1.5 top-1.5 w-3 h-3 rounded-full border-2 border-legal-gold bg-white dark:bg-legal-charcoal-medium;
+}
+
+/* Overdue Deadlines pulse indicator */
+@keyframes overdue-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: .6;
+    transform: scale(1.05);
+  }
+}
+
+.animate-overdue {
+  animation: overdue-pulse 2s infinite ease-in-out;
+}
