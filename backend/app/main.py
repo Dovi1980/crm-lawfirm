@@ -25,7 +25,7 @@ from app.routers.tasks import router as tasks_router
 # Configure Structured Logging
 structlog.configure(
     processors=[
-        structlog.processors.TimeStamps(fmt="iso"),
+        structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.add_log_level,
         structlog.processors.JSONRenderer(),
     ]
