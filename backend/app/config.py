@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api"
 
+    # Rate Limiting
+    ENABLE_RATE_LIMITER: bool = True
+
     # Database
     DATABASE_URL: str
 

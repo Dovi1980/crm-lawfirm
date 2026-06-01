@@ -62,13 +62,13 @@ const LoginPage = () => {
           {/* Email */}
           <div>
             <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Correo Electrónico</label>
-            <div className="relative">
-              <Mail className="absolute left-3.5 top-3 w-5 h-5 text-slate-400" />
+            <div className="flex items-center gap-3">
+              <Mail className="w-5 h-5 text-slate-400 flex-shrink-0" />
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="premium-input pl-11"
+                className="premium-input w-full"
                 placeholder="abogado@estudio.com"
                 required
                 disabled={isSubmitting}
@@ -79,13 +79,13 @@ const LoginPage = () => {
           {/* Password */}
           <div>
             <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Contraseña</label>
-            <div className="relative">
-              <Lock className="absolute left-3.5 top-3 w-5 h-5 text-slate-400" />
+            <div className="flex items-center gap-3">
+              <Lock className="w-5 h-5 text-slate-400 flex-shrink-0" />
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="premium-input pl-11"
+                className="premium-input w-full"
                 placeholder="••••••••"
                 required
                 disabled={isSubmitting}

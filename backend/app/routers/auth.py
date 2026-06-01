@@ -8,6 +8,7 @@ from app.models.user import User
 from app.schemas.user import (
     UserLogin, TokenResponse, PasswordResetRequest, PasswordResetConfirm
 )
+from app.config import settings
 from app.services.auth_service import AuthService
 from app.services.email_service import EmailService
 
@@ -15,7 +16,7 @@ from app.services.email_service import EmailService
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=get_remote_address, enabled=settings.ENABLE_RATE_LIMITER)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 # In-Memory Lockout Trackers (Standard for MVP to avoid DB schema creep)

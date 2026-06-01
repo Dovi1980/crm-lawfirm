@@ -18,6 +18,7 @@ Este MVP (Mínimo Producto Viable) incluye una arquitectura robusta y modular li
 | **Query State**| **TanStack React Query v5** | Gestión y caché asíncrona en el frontend. |
 | **Proxy / Web** | **Nginx** | Reverse proxy con estrictas cabeceras de seguridad. |
 | **Contenedores**| **Docker & Docker Compose**| Despliegue unificado con un solo comando. |
+| **CI / CD**     | **GitHub Actions**          | Pipeline automatizado de pruebas y compilación. |
 
 ---
 
@@ -124,3 +125,31 @@ Para visualizarlos en tiempo real, simplemente ejecute:
 ```bash
 docker compose logs -f backend
 ```
+
+---
+
+## 🧪 Integración Continua (CI) y Pruebas Automatizadas
+
+El proyecto cuenta con una canalización de **Integración Continua (CI)** totalmente automatizada configurada con **GitHub Actions** en `.github/workflows/ci.yml`.
+
+### Flujo de Trabajo en la Nube
+Cada vez que realizas un `push` o abres un `pull request` en la rama `main`, GitHub Actions ejecuta automáticamente:
+1.  **Backend (Python 3.10)**: Levanta una base de datos PostgreSQL 15 temporal y aislada, instala las dependencias de desarrollo (`requirements-dev.txt`) y ejecuta la suite de pruebas unitarias (`pytest`) con reportes de cobertura de código.
+2.  **Frontend (React/Vite)**: Instala las dependencias y compila la aplicación (`npm run build`) para asegurar que no haya errores de tipo ni de importación en la vista de producción.
+
+### Ejecutar Pruebas Locales (Backend)
+Si quieres correr los tests automatizados localmente en tu entorno de desarrollo, sigue estos pasos:
+1. Asegúrate de tener un entorno virtual de Python activo e instala las dependencias de desarrollo:
+   ```bash
+   cd backend
+   pip install -r requirements-dev.txt
+   ```
+2. Ejecuta los tests indicando variables ficticias para evitar fallos de configuración de entorno:
+   ```bash
+   DATABASE_URL=sqlite+aiosqlite:///:memory: SECRET_KEY=testkey PYTHONPATH=. pytest
+   ```
+
+### ⚙️ Rate Limiting en Desarrollo
+Por defecto, el endpoint de inicio de sesión tiene un límite de intentos estricto de seguridad. En desarrollo local o pruebas de integración, este límite puede provocar bloqueos temporales (error `429 Too Many Requests`). 
+
+Puedes desactivar fácilmente el limitador local agregando `ENABLE_RATE_LIMITER=False` en tu archivo `.env`. En producción, esta variable se mantendrá en `True` de forma automática para proteger el sistema.
