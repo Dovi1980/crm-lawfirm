@@ -1,6 +1,6 @@
-> Como lo probamos: Haz un paso a paso
+> Como lo probamos:
 
-  Aquí tienes una guía detallada paso a paso para probar la aplicación de punta a punta en tu entorno local.
+  Esta es una guía detallada paso a paso para probar la aplicación de punta a punta en tu entorno local.
   Esta guía te permitirá verificar los roles, el aislamiento de datos y los controles de seguridad que hemos construido en el sistema.
   ──────
   ### Paso 1: Preparar el Entorno e Iniciar Contenedores
