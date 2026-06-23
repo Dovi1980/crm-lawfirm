@@ -7,8 +7,8 @@ Este documento sirve como el estado de situación y log histórico del proyecto 
 ## 📅 Información de Control
 
 *   **Última Actualización:** 2026-06-23
-*   **Rama Git Activa:** `main`
-*   **Estado del Repositorio:** Cambios en preparación para commit (remoción de `.env`, `.venv` y `.pyc` + agregado de `.gitignore`).
+*   **Rama Git Activa:** `main` (commit `20c4321`)
+*   **Estado del Repositorio:** Limpio (`working tree clean`), por delante de `origin/main` por 1 commit.
 *   **Despliegue Local:** Docker Compose (PostgreSQL, FastAPI, React/Vite, Nginx)
 
 ---
@@ -195,6 +195,7 @@ El archivo `.env` controla el comportamiento de la aplicación.
 | :--- | :--- | :--- | :--- | :--- |
 | **2026-06-23** | Antigravity | Análisis inicial del proyecto y generación del log de estado | - Inspección de la estructura de archivos en backend, frontend, nginx y docker.<br>- Comprobación del estado limpio de la rama `main` de Git.<br>- Análisis de modelos de base de datos (`Case`, `Client`, `Interaction`, `Task`, `User`, `Token`).<br>- Creación de este archivo de estado ([PROJECT_STATUS.md](file:///D:/Lab/crm-lawfirm/PROJECT_STATUS.md)). | **Limpio e Inactivo**.<br>Entorno dockerizable listo para desarrollo de features. |
 | **2026-06-23 (Sec)** | Antigravity | Corrección de inconsistencias de Git y análisis de mejoras | - Creación de [.gitignore](file:///D:/Lab/crm-lawfirm/.gitignore) en la raíz.<br>- Remoción del índice de Git del archivo `.env` (credenciales locales), la carpeta `backend/.venv` (sobrecarga de 4000+ dependencias compiladas) y carpetas `__pycache__` usando `git rm --cached`.<br>- Agregado y preparación de los archivos nuevos en Git.<br>- Identificación de inconsistencias en base de código (consultas N+1, problemas de concurrencia y proxies de datos). | **Listo para Commit**.<br>Archivos innecesarios/secretos removidos de Git y guardados localmente. |
+| **2026-06-23 (Com)** | Antigravity | Asegurar repositorio y datos del equipo local | - Generación de credenciales PostgreSQL y admin seguras y clave secreta JWT criptográfica robusta.<br>- Actualización del archivo local [.env](file:///D:/Lab/crm-lawfirm/.env) con las nuevas credenciales.<br>- Realización de commit final `20c4321` con [.gitignore](file:///D:/Lab/crm-lawfirm/.gitignore) y [PROJECT_STATUS.md](file:///D:/Lab/crm-lawfirm/PROJECT_STATUS.md), garantizando un repositorio seguro y limpio. | **Confirmado y Seguro**.<br>Secrets removidos del repositorio, contraseñas actualizadas y base lista para arranque. |
 
 ---
 
@@ -203,7 +204,7 @@ El archivo `.env` controla el comportamiento de la aplicación.
 ### 🚨 Inconsistencias de Seguridad y Git (Resueltas)
 *   [x] **Falta de `.gitignore` y Fuga de Secretos:** El archivo `.env` con credenciales de desarrollo y la base de datos estaba siendo subido a Git.
 *   [x] **Sobrecarga de Repositorio:** El entorno virtual de Python (`backend/.venv`) y los archivos compilados (`__pycache__`) estaban comprometidos en Git.
-    *   *Resolución:* Se creó [.gitignore](file:///D:/Lab/crm-lawfirm/.gitignore), se corrió `git rm --cached` y se prepararon los archivos para el commit.
+    *   *Resolución:* Se creó [.gitignore](file:///D:/Lab/crm-lawfirm/.gitignore), se corrió `git rm --cached` y se finalizó el commit `20c4321`.
 
 ### 🔍 Inconsistencias y Mejoras de Código Detectadas
 *   [ ] **Problema de Consulta N+1 en Dashboard:**
