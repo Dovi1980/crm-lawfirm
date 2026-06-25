@@ -8,18 +8,14 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Check if user session already exists in local storage
+    // Restore session from localStorage (refresh token lives in HttpOnly cookie).
     const token = localStorage.getItem('accessToken')
     const email = localStorage.getItem('userEmail')
     const role = localStorage.getItem('userRole')
     const name = localStorage.getItem('userName')
 
     if (token && email && role && name) {
-      setUser({
-        email,
-        role,
-        name
-      })
+      setUser({ email, role, name })
     }
     setLoading(false)
   }, [])
@@ -27,22 +23,16 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     try {
       const response = await axiosClient.post('/auth/login', { email, password })
-      const { access_token, refresh_token, role, user_email, user_name } = response.data
+      const { access_token, role, user_email, user_name } = response.data
 
-      // Save to local storage
+      // Refresh token is set server-side as HttpOnly cookie — not stored here.
       localStorage.setItem('accessToken', access_token)
-      localStorage.setItem('refreshToken', refresh_token)
       localStorage.setItem('userRole', role)
       localStorage.setItem('userEmail', user_email)
       localStorage.setItem('userName', user_name)
 
-      // Set user state
-      setUser({
-        email: user_email,
-        role,
-        name: user_name
-      })
-      
+      setUser({ email: user_email, role, name: user_name })
+
       return { success: true }
     } catch (error) {
       const message = error.response?.data?.detail || 'Ocurrió un error al iniciar sesión'
@@ -51,17 +41,12 @@ export const AuthProvider = ({ children }) => {
   }
 
   const logout = async () => {
-    const refreshToken = localStorage.getItem('refreshToken')
-    if (refreshToken) {
-      try {
-        // Safe backend logout to revoke token
-        await axiosClient.post(`/auth/logout?refresh_token=${refreshToken}`)
-      } catch (e) {
-        console.error("Failed to revoke token on server", e)
-      }
+    try {
+      // Server reads the refresh token from the HttpOnly cookie and revokes it.
+      await axiosClient.post('/auth/logout')
+    } catch (e) {
+      console.error('Failed to revoke session on server', e)
     }
-    
-    // Clear local cache session anyway
     localStorage.clear()
     setUser(null)
   }

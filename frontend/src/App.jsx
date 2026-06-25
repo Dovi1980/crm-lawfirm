@@ -14,6 +14,7 @@ import CasesPage from './pages/CasesPage'
 import CaseDetailPage from './pages/CaseDetailPage'
 import TasksPage from './pages/TasksPage'
 import UsersPage from './pages/UsersPage'
+import TemplatesPage from './pages/TemplatesPage'
 
 // Create TanStack Query Client
 const queryClient = new QueryClient({
@@ -52,6 +53,11 @@ function App() {
               <Route path="/users" element={
                 <ProtectedRoute allowedRoles={['admin']}>
                   <UsersPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/templates" element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <TemplatesPage />
                 </ProtectedRoute>
               } />
             </Route>

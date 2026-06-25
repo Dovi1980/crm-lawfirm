@@ -11,3 +11,13 @@ python-jose[cryptography]>=3.3.0
 slowapi>=0.1.8
 structlog>=23.1.0
 python-multipart>=0.0.6
+
+# AI providers — all three are imported lazily; install only the ones in use.
+anthropic>=0.40.0
+openai>=1.50.0
+httpx>=0.27.0
+
+# Document export — pure-Python, no system deps (Cairo/Pango/LibreOffice).
+python-docx>=1.1.0
+reportlab>=4.2.0
+

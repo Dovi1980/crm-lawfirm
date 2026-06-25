@@ -1,14 +1,15 @@
 import React from 'react'
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { 
-  LayoutDashboard, 
-  Users, 
-  Briefcase, 
-  CheckSquare, 
-  UserCog, 
-  LogOut, 
-  Scale
+import {
+  LayoutDashboard,
+  Users,
+  Briefcase,
+  CheckSquare,
+  UserCog,
+  LogOut,
+  Scale,
+  FileText
 } from 'lucide-react'
 
 const Sidebar = () => {
@@ -23,6 +24,7 @@ const Sidebar = () => {
 
   if (isAdmin) {
     links.push({ to: '/users', label: 'Abogados & Personal', icon: UserCog })
+    links.push({ to: '/templates', label: 'Templates de IA', icon: FileText })
   }
 
   return (

@@ -5,6 +5,8 @@ from app.models.case import Case, CaseType, CaseStatus
 from app.models.interaction import Interaction, InteractionType
 from app.models.task import Task, TaskPriority, TaskStatus
 from app.models.token import RefreshToken, PasswordResetToken
+from app.models.document import Document
+from app.models.custom_template import CustomTemplate
 
 __all__ = [
     "Base",
@@ -22,4 +24,6 @@ __all__ = [
     "TaskStatus",
     "RefreshToken",
     "PasswordResetToken",
+    "Document",
+    "CustomTemplate",
 ]

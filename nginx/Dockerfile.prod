@@ -1,0 +1,17 @@
+# Multi-stage build: produces a single nginx image that serves the SPA
+# AND proxies /api to the backend. Eliminates the separate frontend container.
+
+# Stage 1: Build the SPA
+FROM node:18-alpine AS build
+WORKDIR /build
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm install
+COPY frontend/ ./
+RUN npm run build
+
+# Stage 2: Runtime
+FROM nginx:alpine
+COPY --from=build /build/dist /usr/share/nginx/html
+COPY nginx/nginx.prod.conf /etc/nginx/nginx.conf
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

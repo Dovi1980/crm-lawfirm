@@ -1,225 +1,121 @@
 # 📋 Estado y Bitácora del Proyecto — CRM Lex Studio
 
-Este documento sirve como el estado de situación y log histórico del proyecto **CRM Lex Studio**. Debe ser actualizado por el desarrollador o agente al finalizar cada sesión de trabajo para mantener la trazabilidad de los cambios, tareas pendientes y decisiones de diseño.
+Bitácora viva del proyecto. Debe actualizarse al final de cada sesión de trabajo significativa.
 
 ---
 
-## 📅 Información de Control
+## 📅 Información de control
 
-*   **Última Actualización:** 2026-06-23
-*   **Rama Git Activa:** `main` (commit `20c4321`)
-*   **Estado del Repositorio:** Limpio (`working tree clean`), por delante de `origin/main` por 1 commit.
-*   **Despliegue Local:** Docker Compose (PostgreSQL, FastAPI, React/Vite, Nginx)
+- **Última actualización:** 2026-06-24
+- **Rama Git activa:** `main`
+- **Versión funcional:** v0.3 (Fase 3 completa — redacción asistida + export + templates dinámicos)
+- **Tests:** 31/31 ✅ (sqlite-in-memory para unit; Postgres real en CI)
+- **Build frontend:** ~393 KB / 112 KB gzip
+- **Despliegue local:** Docker Compose (Postgres, FastAPI, React/Vite, Nginx) — dev y prod separados
 
 ---
 
-## 🏗️ Arquitectura y Stack Tecnológico
-
-La plataforma está estructurada como una aplicación web Full-Stack dockerizada con aislamiento estricto y proxy inverso:
+## 🏗️ Arquitectura actual
 
 ```mermaid
 graph TD
-    Client[Navegador del Usuario] -->|Puerto 80| Nginx[Proxy Nginx]
+    Client[Navegador] -->|Puerto 80| Nginx[Nginx Proxy]
     Nginx -->|/api/*| FastAPI[Backend FastAPI]
-    Nginx -->|/*| React[Frontend React / Vite]
-    FastAPI -->|Async Connection| PostgreSQL[(PostgreSQL 15)]
+    Nginx -->|/*| Frontend[SPA React]
+    FastAPI -->|asyncpg| PostgreSQL[(PostgreSQL 15)]
+    FastAPI -->|BaseAIProvider| Provider{AI Provider Factory}
+    Provider -->|AI_PROVIDER=anthropic| Anthropic[Anthropic Claude]
+    Provider -->|AI_PROVIDER=openai| OpenAI[OpenAI / Azure]
+    Provider -->|AI_PROVIDER=gemini| Gemini[Google Gemini]
 ```
 
-### Tecnologías Utilizadas
+### Decisión arquitectónica clave: capa de IA universal
 
-| Capa | Componente | Descripción |
+Toda la app consume una interfaz abstracta `BaseAIProvider`. El switch entre proveedores es una variable de entorno — no hay código atado a Anthropic, OpenAI o Gemini en ningún lado fuera de `app/services/ai/<provider>.py`. Esto deja al cliente final libre de:
+
+- Usar su suscripción existente con cualquier proveedor
+- Cambiar de proveedor sin tocar la app
+- Negociar precio con quien quiera
+
+---
+
+## ✅ Fases completadas
+
+### Fase 1 — Hardening (seguridad y operación)
+- Refresh token en **cookie HttpOnly** con rotación (XSS-resistente)
+- Single-flight refresh en el cliente (evita N llamadas paralelas a `/refresh`)
+- `alembic.ini` sin credenciales hardcodeadas
+- Build de producción multi-stage (SPA estática en image de Nginx)
+- `docker-compose.prod.yml` separado (sin source volumes, sin Node container)
+- Scripts `setup.sh` y `setup.ps1` (un comando: docker → migrar → seed)
+- Suite de tests: auth + RBAC + inmutabilidad (verifica rutas de FastAPI, no solo runtime)
+
+### Fase 2 — IA conversacional
+- Capa abstracta `BaseAIProvider` + adaptadores Anthropic / OpenAI / Gemini
+- Factory que lee `AI_PROVIDER` y cachea la instancia (`lru_cache`)
+- `ai_service.py` arma dossiers del caso (metadata + 30 interacciones + tasks abiertas)
+- 3 endpoints SSE:
+  - `POST /api/ai/cases/{id}/summary` (sync, resumen de 8 viñetas)
+  - `POST /api/ai/cases/{id}/chat` (chat con contexto del caso)
+  - `POST /api/ai/assistant` (asistente flotante global, sin contexto)
+- Hook `useAIStream` consume SSE con `fetch` + `ReadableStream` (no se puede usar EventSource por auth header)
+- UI: `ChatPanel` reutilizable, `FloatingAssistant` global, `CaseAIPanel` en el detalle de caso
+
+### Fase 3 — Redacción asistida, export y templates dinámicos
+- Modelo `Document` (append-only, `is_archived` para soft delete) + migración
+- 4 templates de sistema en código: `carta_documento`, `intimacion_cobro`, `escrito_presentacion`, `convenio_honorarios`
+- Wizard de 3 pasos en UI: picker → variables → streaming preview → guardar
+- Export **DOCX** (python-docx) y **PDF** (reportlab) — puro Python, sin LibreOffice/Cairo en el image
+- Parser de Markdown propio para alimentar ambos renderers (headings, listas, **bold**, *italic*)
+- Modelo `CustomTemplate` con variables como JSON; built-in tiene precedencia sobre custom en caso de colisión
+- CRUD `/api/templates/` admin-only (`RoleChecker`) + catálogo lectura libre (`GET /api/templates/catalog` con flag `is_builtin`)
+- Página admin `/templates` con cards built-in (badge "Sistema") vs custom (editables)
+- Modal con form: clave, nombre, descripción, instrucción para el modelo, editor dinámico de variables
+
+---
+
+## 🧪 Cobertura de tests
+
+| Archivo | Foco | Tests |
 | :--- | :--- | :--- |
-| **Backend** | Python 3.11 + FastAPI | REST API asíncrona robusta y validada con Pydantic v2. |
-| **Base de Datos** | PostgreSQL 15 | Almacenamiento relacional administrado de forma asíncrona (`asyncpg`). |
-| **Migraciones** | Alembic | Versionado y control de esquemas de tablas SQL. |
-| **Frontend** | React 18 (Vite) | Single Page Application (SPA) modular e interactiva. |
-| **Estilos** | Tailwind CSS 3 | Diseño premium con paleta legal `navy` (azul marino) y `gold` (oro). |
-| **Estado Remoto** | TanStack React Query v5 | Sincronización y caché de datos del backend. |
-| **Ruteo Frontend** | React Router DOM v6 | Gestión de la navegación y protección de rutas. |
-| **Proxy / Web** | Nginx | Proxy inverso que añade cabeceras HTTP de seguridad estrictas (`CSP`, `HSTS`, etc.). |
-| **Contenedores** | Docker & Compose | Orquestación completa en entornos locales y de producción. |
+| `test_main.py` | Health check | 1 |
+| `test_auth.py` | Login OK/KO, cookie HttpOnly, rotación de token, logout revoca, endpoint protegido sin token | 7 |
+| `test_rbac.py` | Lawyer ve solo sus casos, no puede ver ajenos por ID, admin ve todos, assistant no borra | 5 |
+| `test_immutability.py` | No existen rutas PUT/PATCH/DELETE en `/interactions` (verifica tabla de rutas + runtime) | 6 |
+| `test_export.py` | Parser de markdown distingue bloques, DOCX produce ZIP válido, PDF produce magic bytes | 4 |
+| `test_templates.py` | Admin CRUD, lawyer no puede crear, no se puede shadowizar built-in, duplicados rechazados, catalog list | 8 |
+| **Total** | | **31** |
 
 ---
 
-## 🗄️ Modelo de Datos y Relaciones
+## 🔑 Decisiones de diseño que conviene recordar
 
-El backend utiliza SQLAlchemy 2.0 (estilo asíncrono moderno con `Mapped` y `mapped_column`). Las entidades y sus relaciones se estructuran del siguiente modo:
-
-```mermaid
-erDiagram
-    users {
-        int id PK
-        string email UK
-        string hashed_password
-        string first_name
-        string last_name
-        enum role
-        boolean is_active
-        datetime created_at
-        datetime updated_at
-    }
-    clients {
-        int id PK
-        string first_name
-        string last_name
-        enum client_type
-        string tax_id UK
-        string email
-        string phone
-        string address
-        string city
-        string province
-        string notes
-        boolean is_active
-        datetime created_at
-        datetime updated_at
-    }
-    cases {
-        int id PK
-        string case_number UK
-        string title
-        string description
-        enum case_type
-        enum status
-        int client_id FK
-        int assigned_lawyer_id FK
-        int created_by_id FK
-        date start_date
-        date estimated_close_date
-        decimal agreed_fees
-        string internal_notes
-        datetime created_at
-        datetime updated_at
-    }
-    interactions {
-        int id PK
-        enum interaction_type
-        string description
-        datetime interaction_date
-        int duration_minutes
-        int user_id FK
-        int case_id FK "nullable"
-        int client_id FK "nullable"
-        datetime created_at
-    }
-    tasks {
-        int id PK
-        string title
-        string description
-        enum priority
-        enum status
-        int assigned_to_id FK
-        int created_by_id FK
-        int case_id FK "nullable"
-        int client_id FK "nullable"
-        date due_date
-        datetime created_at
-        datetime updated_at
-    }
-    refresh_tokens {
-        int id PK
-        string token_hash UK
-        int user_id FK
-        datetime expires_at
-        boolean revoked
-        datetime created_at
-    }
-    password_reset_tokens {
-        int id PK
-        string token_hash UK
-        int user_id FK
-        datetime expires_at
-        boolean used
-        datetime created_at
-    }
-
-    users ||--o{ cases : "assigned_lawyer / creator"
-    users ||--o{ tasks : "assigned_to / creator"
-    users ||--o{ interactions : "author"
-    users ||--o{ refresh_tokens : "has"
-    users ||--o{ password_reset_tokens : "has"
-    
-    clients ||--o{ cases : "has"
-    clients ||--o{ tasks : "associated"
-    clients ||--o{ interactions : "associated"
-
-    cases ||--o{ interactions : "has (immutable)"
-    cases ||--o{ tasks : "has"
-```
+1. **Documents append-only.** Cada `guardar` es una fila nueva — nunca se sobrescribe. Soft delete con `is_archived`, igual que interactions.
+2. **Built-in templates inmutables.** Viven en código (`document_templates.py`) y siempre ganan sobre custom. El admin extiende, no shadowiza.
+3. **Refresh token NUNCA en localStorage.** Cookie HttpOnly, `Path=/api/auth`, `SameSite=lax`. El cliente nunca tiene acceso JS al refresh.
+4. **Auth = bearer en header + cookie en refresh.** El access token corto sí va en `Authorization`; el refresh en cookie. Mejor del XSS y mejor UX que doble cookie.
+5. **SSE con `fetch`, no `EventSource`.** EventSource no permite Authorization header. Se parsea el stream a mano (~30 líneas en `useAIStream`).
+6. **Multi-proveedor desde el día 1.** No hay `import anthropic` fuera de `anthropic_provider.py`. Aplicar el mismo patrón si se agrega Mistral/Cohere/Bedrock.
+7. **Export sin deps de sistema.** Se descartó WeasyPrint (necesita Cairo/Pango); python-docx + reportlab son puro Python y mantienen el image chico.
 
 ---
 
-## 🔒 Mecanismos de Seguridad Clave
+## 🛣️ Próximos pasos sugeridos (no comprometidos)
 
-1.  **Aislamiento de Datos por Rol:**
-    *   `Admin`: Acceso completo a todas las secciones (administración de personal y configuraciones).
-    *   `Lawyer` (Abogado): Solo puede visualizar y gestionar expedientes y tareas en las que esté asignado directamente.
-    *   `Assistant` (Asistente): Acceso de lectura global (Dashboard consolidado de la oficina), pero bloqueado para operaciones de eliminación.
-2.  **Inmutabilidad del Historial (Interacciones):** No existen rutas o endpoints para editar o eliminar gestiones/interacciones una vez registradas.
-3.  **Seguridad JWT y Rotación de Tokens:** Tokens de acceso efímeros (60 minutos) con cookies/tokens de refresco encriptados en base de datos bajo algoritmo SHA-256 con rotación automática (Token Rotation).
-4.  **Rate Limiting & Lockout:** Límite estricto de intentos de inicio de sesión (máximo 5 por IP cada 15 min; bloqueo de cuenta de correo después de 10 fallos consecutivos).
-
----
-
-## ⚙️ Configuración del Entorno y Comandos Útiles
-
-El archivo `.env` controla el comportamiento de la aplicación.
-*   **Rate Limiting en desarrollo:** Se puede desactivar temporalmente con `ENABLE_RATE_LIMITER=False`.
-*   **Recuperación de contraseña local:** Si `SMTP_HOST` está vacío, el enlace y token de recuperación se imprimen directamente en la consola del backend (`docker compose logs -f backend`).
-
-### Comandos de Operación
-
-*   **Levantar el entorno dockerizado:**
-    ```bash
-    docker compose up --build -d
-    ```
-*   **Aplicar migraciones de base de datos:**
-    ```bash
-    docker compose exec backend alembic upgrade head
-    ```
-*   **Crear el primer usuario administrador (seeding):**
-    ```bash
-    docker compose exec backend python seed_admin.py
-    ```
-*   **Correr suite de pruebas unitarias (Backend):**
-    ```bash
-    # En directorio backend/
-    DATABASE_URL=sqlite+aiosqlite:///:memory: SECRET_KEY=testkey PYTHONPATH=. pytest
-    ```
+| Idea | Costo aprox | Cuándo conviene |
+| :--- | :--- | :--- |
+| Audit log de quién leyó qué documento | medio | Cuando el cliente lo pida por compliance |
+| Versión multi-tenant (mismo deploy, varios estudios) | alto | Solo si el negocio crece a SaaS |
+| Plantillas DOCX cargadas por el usuario (no Markdown) | medio | Si se piden "membrete del estudio" en exports |
+| Adapter Mistral / Bedrock | bajo | Cuando un cliente lo pida (~70 LOC + tests) |
+| OAuth con Google Workspace | medio | Si el estudio ya usa Google |
+| Búsqueda full-text en documentos generados | medio | Cuando el catálogo crezca a >100 docs/caso |
 
 ---
 
-## 📝 Bitácora de Sesiones de Trabajo (Work Log)
+## ⚠️ Cosas que NO conviene tocar sin pensarlo dos veces
 
-| Fecha | Autor (Agente) | Objetivo Principal | Acciones Realizadas | Estado del Proyecto / Notas |
-| :--- | :--- | :--- | :--- | :--- |
-| **2026-06-23** | Antigravity | Análisis inicial del proyecto y generación del log de estado | - Inspección de la estructura de archivos en backend, frontend, nginx y docker.<br>- Comprobación del estado limpio de la rama `main` de Git.<br>- Análisis de modelos de base de datos (`Case`, `Client`, `Interaction`, `Task`, `User`, `Token`).<br>- Creación de este archivo de estado ([PROJECT_STATUS.md](file:///D:/Lab/crm-lawfirm/PROJECT_STATUS.md)). | **Limpio e Inactivo**.<br>Entorno dockerizable listo para desarrollo de features. |
-| **2026-06-23 (Sec)** | Antigravity | Corrección de inconsistencias de Git y análisis de mejoras | - Creación de [.gitignore](file:///D:/Lab/crm-lawfirm/.gitignore) en la raíz.<br>- Remoción del índice de Git del archivo `.env` (credenciales locales), la carpeta `backend/.venv` (sobrecarga de 4000+ dependencias compiladas) y carpetas `__pycache__` usando `git rm --cached`.<br>- Agregado y preparación de los archivos nuevos en Git.<br>- Identificación de inconsistencias en base de código (consultas N+1, problemas de concurrencia y proxies de datos). | **Listo para Commit**.<br>Archivos innecesarios/secretos removidos de Git y guardados localmente. |
-| **2026-06-23 (Com)** | Antigravity | Asegurar repositorio y datos del equipo local | - Generación de credenciales PostgreSQL y admin seguras y clave secreta JWT criptográfica robusta.<br>- Actualización del archivo local [.env](file:///D:/Lab/crm-lawfirm/.env) con las nuevas credenciales.<br>- Realización de commit final `20c4321` con [.gitignore](file:///D:/Lab/crm-lawfirm/.gitignore) y [PROJECT_STATUS.md](file:///D:/Lab/crm-lawfirm/PROJECT_STATUS.md), garantizando un repositorio seguro y limpio. | **Confirmado y Seguro**.<br>Secrets removidos del repositorio, contraseñas actualizadas y base lista para arranque. |
-
----
-
-## 🎯 Backlog y Inconsistencias Detectadas (To-Do & Fixes)
-
-### 🚨 Inconsistencias de Seguridad y Git (Resueltas)
-*   [x] **Falta de `.gitignore` y Fuga de Secretos:** El archivo `.env` con credenciales de desarrollo y la base de datos estaba siendo subido a Git.
-*   [x] **Sobrecarga de Repositorio:** El entorno virtual de Python (`backend/.venv`) y los archivos compilados (`__pycache__`) estaban comprometidos en Git.
-    *   *Resolución:* Se creó [.gitignore](file:///D:/Lab/crm-lawfirm/.gitignore), se corrió `git rm --cached` y se finalizó el commit `20c4321`.
-
-### 🔍 Inconsistencias y Mejoras de Código Detectadas
-*   [ ] **Problema de Consulta N+1 en Dashboard:**
-    *   *Ubicación:* [/api/dashboard/stats](file:///D:/Lab/crm-lawfirm/backend/app/main.py#L70) en `backend/app/main.py`.
-    *   *Detalle:* Itera sobre las 10 actividades recientes y ejecuta una consulta SQL individual para obtener los nombres de usuario del autor de cada una.
-    *   *Solución:* Utilizar un join SQL o `joinedload(Interaction.user)` en la consulta original.
-*   [ ] **Falta de Fecha de Cierre Real en Expedientes:**
-    *   *Ubicación:* [/api/dashboard/stats](file:///D:/Lab/crm-lawfirm/backend/app/main.py#L99) y [Case](file:///D:/Lab/crm-lawfirm/backend/app/models/case.py).
-    *   *Detalle:* El conteo de expedientes cerrados en el mes usa `Case.start_date` como proxy, lo cual es incorrecto para casos abiertos en meses anteriores y cerrados este mes.
-    *   *Solución:* Agregar un campo `closed_at` al modelo `Case` que se actualice al pasar a estado `CERRADO`.
-*   [ ] **Condición de Carrera en Generación de Código de Expediente:**
-    *   *Ubicación:* [/api/cases POST](file:///D:/Lab/crm-lawfirm/backend/app/routers/cases.py#L88) en `backend/app/routers/cases.py`.
-    *   *Detalle:* Se genera un correlativo `EXP-YYYY-NNNN` contando los expedientes existentes. Si dos peticiones ocurren concurrentemente, generarán el mismo número y una fallará por violación de unicidad.
-    *   *Solución:* Implementar secuencias a nivel base de datos o un bucle de reintento transaccional.
-*   [ ] **Integración de Inteligencia Artificial (Gemini):**
-    *   *Ubicación:* [config.py](file:///D:/Lab/crm-lawfirm/backend/app/config.py) y [.env.example](file:///D:/Lab/crm-lawfirm/.env.example).
-    *   *Detalle:* Hay un placeholder para `GEMINI_API_KEY` pero ninguna funcionalidad del backend la utiliza.
-    *   *Solución:* Diseñar módulos de IA para analizar expedientes judiciales.
+- Las rutas `/interactions` (la inmutabilidad es un requisito legal — los tests fallan si se agrega PUT/DELETE)
+- El scope del cookie de refresh (`Path=/api/auth`) — moverlo a `/` rompe el modelo de seguridad
+- Mover `document_templates.py` a DB sin mantener la precedencia built-in > custom — admins podrían bloquear features de sistema
+- `BaseAIProvider.complete()` y `.stream()` — son la frontera con cada SDK; cambios de firma rompen los 3 adapters

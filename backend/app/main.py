@@ -21,6 +21,9 @@ from app.routers.clients import router as clients_router
 from app.routers.cases import router as cases_router
 from app.routers.interactions import router as interactions_router
 from app.routers.tasks import router as tasks_router
+from app.routers.ai import router as ai_router
+from app.routers.documents import router as documents_router
+from app.routers.templates import router as templates_router
 
 # Configure Structured Logging
 structlog.configure(
@@ -59,6 +62,9 @@ app.include_router(clients_router, prefix=settings.API_V1_STR)
 app.include_router(cases_router, prefix=settings.API_V1_STR)
 app.include_router(interactions_router, prefix=settings.API_V1_STR)
 app.include_router(tasks_router, prefix=settings.API_V1_STR)
+app.include_router(ai_router, prefix=settings.API_V1_STR)
+app.include_router(documents_router, prefix=settings.API_V1_STR)
+app.include_router(templates_router, prefix=settings.API_V1_STR)
 
 
 @app.get("/api/health")

@@ -2,6 +2,7 @@ import React from 'react'
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Navbar from './Navbar'
+import FloatingAssistant from './ai/FloatingAssistant'
 
 const Layout = () => {
   return (
@@ -19,6 +20,9 @@ const Layout = () => {
           <Outlet />
         </main>
       </div>
+
+      {/* Global floating AI assistant */}
+      <FloatingAssistant />
     </div>
   )
 }

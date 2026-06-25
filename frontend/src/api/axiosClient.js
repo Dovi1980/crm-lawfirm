@@ -5,9 +5,11 @@ const axiosClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  // Send the refresh-token HttpOnly cookie on same-origin requests.
+  withCredentials: true,
 })
 
-// Request Interceptor: Automatically inject access token if available
+// Request Interceptor: inject access token from in-memory/localStorage.
 axiosClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('accessToken')
@@ -16,52 +18,52 @@ axiosClient.interceptors.request.use(
     }
     return config
   },
-  (error) => {
-    return Promise.reject(error)
-  }
+  (error) => Promise.reject(error)
 )
 
-// Response Interceptor: Automatically handle token refreshing on 401
+// Single-flight refresh: coalesce concurrent 401s into one /refresh call.
+let refreshInFlight = null
+
+async function performRefresh() {
+  // The refresh token is read server-side from the HttpOnly cookie; no body.
+  const response = await axios.post(
+    '/api/auth/refresh',
+    null,
+    { withCredentials: true }
+  )
+  return response.data.access_token
+}
+
 axiosClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // Never try to refresh on the refresh endpoint itself.
+    const isAuthEndpoint = originalRequest?.url?.includes('/auth/refresh') ||
+                           originalRequest?.url?.includes('/auth/login')
+
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
       originalRequest._retry = true
-      
-      const refreshToken = localStorage.getItem('refreshToken')
-      if (!refreshToken) {
-        // Clear local storage and redirect to login
-        localStorage.clear()
-        window.location.href = '/login'
-        return Promise.reject(error)
-      }
 
       try {
-        // Attempt token refresh rotation via POST
-        // Note: The refresh endpoint expects query parameter 'refresh_token'
-        const response = await axios.post(`/api/auth/refresh?refresh_token=${refreshToken}`)
-        
-        if (response.status === 200) {
-          const { access_token, refresh_token } = response.data
-          
-          localStorage.setItem('accessToken', access_token)
-          localStorage.setItem('refreshToken', refresh_token)
-          
-          // Re-attempt original failed request with the new active token
-          originalRequest.headers.Authorization = `Bearer ${access_token}`
-          return axiosClient(originalRequest)
+        if (!refreshInFlight) {
+          refreshInFlight = performRefresh().finally(() => { refreshInFlight = null })
         }
+        const newAccessToken = await refreshInFlight
+
+        localStorage.setItem('accessToken', newAccessToken)
+        originalRequest.headers.Authorization = `Bearer ${newAccessToken}`
+        return axiosClient(originalRequest)
       } catch (refreshError) {
-        // Refresh token itself expired or revoked
         localStorage.clear()
-        window.location.href = '/login'
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login'
+        }
         return Promise.reject(refreshError)
       }
     }
 
-    // Generic error handling formatting
     return Promise.reject(error)
   }
 )

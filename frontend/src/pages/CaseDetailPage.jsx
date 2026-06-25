@@ -7,6 +7,8 @@ import Modal from '../components/Modal'
 import CaseForm from '../components/forms/CaseForm'
 import InteractionForm from '../components/forms/InteractionForm'
 import TaskForm from '../components/forms/TaskForm'
+import CaseAIPanel from '../components/ai/CaseAIPanel'
+import CaseDocumentsSection from '../components/ai/CaseDocumentsSection'
 import { 
   Briefcase, 
   Scale, 
@@ -336,7 +338,13 @@ const CaseDetailPage = () => {
 
         {/* Dynamic Timeline logs & Task Lists Area */}
         <div className="lg:col-span-2 space-y-8">
-          
+
+          {/* AI assistant panel — summary + chat with case context */}
+          <CaseAIPanel caseId={caseItem.id} />
+
+          {/* AI-drafted documents persisted per case */}
+          <CaseDocumentsSection caseId={caseItem.id} />
+
           {/* Checklist Tasks related to Case */}
           <div className="bg-white dark:bg-legal-charcoal-medium border border-slate-100 dark:border-slate-800 p-6 rounded-2xl shadow-premium">
             <div className="flex items-center justify-between mb-5">

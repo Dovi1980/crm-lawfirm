@@ -51,10 +51,10 @@ class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
-# Schema for Token Response
+# Schema for Token Response (refresh_token delivered via HttpOnly cookie,
+# never in the body — kept out of localStorage / JS access).
 class TokenResponse(BaseModel):
     access_token: str
-    refresh_token: str
     token_type: str = "bearer"
     role: UserRole
     user_email: EmailStr

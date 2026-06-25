@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
+    # Cookie Security (refresh token transport)
+    # Set COOKIE_SECURE=True in production behind HTTPS. False for local HTTP dev.
+    COOKIE_SECURE: bool = False
+    COOKIE_SAMESITE: str = "lax"  # "strict" | "lax" | "none"
+    COOKIE_DOMAIN: str = ""  # empty = host-only cookie
+
     # CORS settings (e.g. "http://localhost:3000,http://localhost:5173")
     ALLOWED_ORIGINS: str = "http://localhost,http://localhost:3000,http://localhost:5173"
 
@@ -37,6 +43,19 @@ class Settings(BaseSettings):
     # Initial Admin Seeding
     FIRST_ADMIN_EMAIL: EmailStr = "admin@estudio.com"
     FIRST_ADMIN_PASSWORD: str = "AdminLawFirm2026!"
+
+    # AI provider — universal layer so each firm can plug in whichever model
+    # they already pay for. Switching is a config change, not a code change.
+    AI_PROVIDER: str = "anthropic"  # anthropic | openai | gemini
+    AI_MODEL_DEFAULT: str = "claude-sonnet-4-6"  # default model id passed to the provider
+    AI_MODEL_DEEP: str = ""  # optional override for heavy tasks (long drafts)
+    AI_ENABLED: bool = True  # global kill switch
+
+    # Provider credentials (only the one for the active provider is required)
+    ANTHROPIC_API_KEY: str = ""
+    OPENAI_API_KEY: str = ""
+    OPENAI_BASE_URL: str = ""  # leave empty for default; set for Azure OpenAI / self-hosted
+    GEMINI_API_KEY: str = ""
 
     # Pydantic Configuration
     model_config = SettingsConfigDict(
