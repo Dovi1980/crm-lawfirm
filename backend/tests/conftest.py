@@ -7,6 +7,7 @@ Environment variables are set BEFORE importing the app, so Settings picks up
 the SQLite URL and a deterministic SECRET_KEY.
 """
 import os
+import tempfile
 
 # IMPORTANT: must run before any `from app...` import.
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
@@ -14,6 +15,8 @@ os.environ.setdefault("SECRET_KEY", "test_secret_key_for_pytest_runs_only_not_re
 os.environ.setdefault("ENABLE_RATE_LIMITER", "False")
 os.environ.setdefault("COOKIE_SECURE", "False")
 os.environ.setdefault("COOKIE_SAMESITE", "lax")
+# Attachments are written to a throwaway temp dir during tests.
+os.environ.setdefault("UPLOAD_DIR", tempfile.mkdtemp(prefix="lexstudio_test_uploads_"))
 
 import pytest_asyncio
 import httpx

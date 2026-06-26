@@ -9,6 +9,7 @@ import InteractionForm from '../components/forms/InteractionForm'
 import TaskForm from '../components/forms/TaskForm'
 import CaseAIPanel from '../components/ai/CaseAIPanel'
 import CaseDocumentsSection from '../components/ai/CaseDocumentsSection'
+import CaseAttachmentsSection from '../components/ai/CaseAttachmentsSection'
 import { 
   Briefcase, 
   Scale, 
@@ -344,6 +345,9 @@ const CaseDetailPage = () => {
 
           {/* AI-drafted documents persisted per case */}
           <CaseDocumentsSection caseId={caseItem.id} />
+
+          {/* Scanned documentation + AI reading */}
+          <CaseAttachmentsSection caseId={caseItem.id} clientId={caseItem.client_id} />
 
           {/* Checklist Tasks related to Case */}
           <div className="bg-white dark:bg-legal-charcoal-medium border border-slate-100 dark:border-slate-800 p-6 rounded-2xl shadow-premium">

@@ -3,7 +3,12 @@ from __future__ import annotations
 
 from typing import AsyncIterator
 
-from app.services.ai.base import AIMessage, BaseAIProvider, ProviderError
+from app.services.ai.base import (
+    AIMessage,
+    BaseAIProvider,
+    ProviderError,
+    reject_attachments_if_present,
+)
 
 
 class OpenAIProvider(BaseAIProvider):
@@ -26,6 +31,7 @@ class OpenAIProvider(BaseAIProvider):
         self._default_model = default_model
 
     def _build_messages(self, messages: list[AIMessage], system: str | None) -> list[dict]:
+        reject_attachments_if_present(messages, self.name)
         out: list[dict] = []
         if system:
             out.append({"role": "system", "content": system})

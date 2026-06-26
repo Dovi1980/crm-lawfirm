@@ -57,6 +57,9 @@ desktop.ini
 # Office lockfiles from previewing exported DOCX
 ~$*
 
-# 5. AI-generated artifacts that should not be checked in by accident
+# 5. AI-generated artifacts & uploads that should not be checked in
 backend/exports/
 backend/tmp/
+backend/uploads/
+backend/data/
+data/attachments/

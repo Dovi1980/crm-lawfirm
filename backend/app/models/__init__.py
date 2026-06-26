@@ -7,6 +7,7 @@ from app.models.task import Task, TaskPriority, TaskStatus
 from app.models.token import RefreshToken, PasswordResetToken
 from app.models.document import Document
 from app.models.custom_template import CustomTemplate
+from app.models.attachment import Attachment
 
 __all__ = [
     "Base",
@@ -26,4 +27,5 @@ __all__ = [
     "PasswordResetToken",
     "Document",
     "CustomTemplate",
+    "Attachment",
 ]

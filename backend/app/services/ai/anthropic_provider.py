@@ -3,7 +3,12 @@ from __future__ import annotations
 
 from typing import AsyncIterator
 
-from app.services.ai.base import AIMessage, BaseAIProvider, ProviderError
+from app.services.ai.base import (
+    AIMessage,
+    BaseAIProvider,
+    ProviderError,
+    reject_attachments_if_present,
+)
 
 
 class AnthropicProvider(BaseAIProvider):
@@ -31,6 +36,7 @@ class AnthropicProvider(BaseAIProvider):
         max_tokens: int = 1024,
         temperature: float = 0.7,
     ) -> str:
+        reject_attachments_if_present(messages, self.name)
         kwargs = {
             "model": model or self._default_model,
             "max_tokens": max_tokens,
@@ -58,6 +64,7 @@ class AnthropicProvider(BaseAIProvider):
         max_tokens: int = 4096,
         temperature: float = 0.7,
     ) -> AsyncIterator[str]:
+        reject_attachments_if_present(messages, self.name)
         kwargs = {
             "model": model or self._default_model,
             "max_tokens": max_tokens,

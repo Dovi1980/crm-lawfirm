@@ -19,6 +19,7 @@ from app.models.interaction import Interaction
 from app.models.task import Task, TaskStatus
 from app.models.user import User
 from app.services.ai import AIMessage, ProviderError, get_ai_provider
+from app.services.ai.base import AIAttachment
 from app.services.document_templates import (
     DocumentTemplate,
     render_user_inputs_block,
@@ -197,6 +198,57 @@ async def stream_document_draft(
         model=model,
         max_tokens=4096,
         temperature=0.4,
+    ):
+        yield chunk
+
+
+async def stream_analyze_attachment(
+    case_id: int,
+    file_bytes: bytes,
+    mime_type: str,
+    filename: str,
+    db: AsyncSession,
+) -> AsyncIterator[str]:
+    """
+    Lee un documento escaneado (PDF/imagen) con un modelo multimodal y produce:
+    un análisis breve + una redacción lista para cargar como gestión.
+
+    Requiere un proveedor con soporte multimodal (Gemini). Otros lanzan ProviderError.
+    """
+    _ensure_ai_enabled()
+    dossier = await _load_case_context(db, case_id)
+    provider = get_ai_provider()
+
+    system = (
+        _BASE_SYSTEM_PROMPT
+        + "\n\nTAREA: analizar el documento adjunto (puede ser una notificación, "
+        "demanda, cédula, oficio, contrato, comprobante u otro). Devolvé la respuesta "
+        "en Markdown con exactamente estas dos secciones:\n\n"
+        "## Resumen\n"
+        "Qué tipo de documento es, partes involucradas, fechas y plazos relevantes, "
+        "y qué acción procesal sugiere (marcada como sugerencia).\n\n"
+        "## Texto para gestión\n"
+        "Una redacción breve (2-4 oraciones), en tercera persona y tono de registro "
+        "de expediente, lista para cargarse como gestión en el historial. Ejemplo: "
+        "'Se recibió cédula de notificación de... con fecha... que otorga plazo de... "
+        "para...'.\n\n"
+        "Si el documento es ilegible o no podés leerlo, decilo explícitamente en lugar "
+        "de inventar contenido.\n\n"
+        "Contexto del expediente al que pertenece:\n\n"
+        + dossier
+    )
+
+    user_msg = AIMessage(
+        role="user",
+        content="Analizá este documento del expediente.",
+        attachments=[AIAttachment(mime_type=mime_type, data=file_bytes, filename=filename)],
+    )
+
+    async for chunk in provider.stream(
+        messages=[user_msg],
+        system=system,
+        max_tokens=4096,
+        temperature=0.3,
     ):
         yield chunk
 

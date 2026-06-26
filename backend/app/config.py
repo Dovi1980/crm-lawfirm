@@ -57,6 +57,17 @@ class Settings(BaseSettings):
     OPENAI_BASE_URL: str = ""  # leave empty for default; set for Azure OpenAI / self-hosted
     GEMINI_API_KEY: str = ""
 
+    # File uploads (scanned documentation attached to cases)
+    UPLOAD_DIR: str = "/data/attachments"  # mounted Docker volume
+    MAX_UPLOAD_MB: int = 15  # per-file cap (kept under Gemini inline_data limit)
+    ALLOWED_UPLOAD_MIME: str = (
+        "application/pdf,image/png,image/jpeg,image/jpg,image/webp"
+    )
+
+    @property
+    def allowed_upload_mime(self) -> List[str]:
+        return [m.strip() for m in self.ALLOWED_UPLOAD_MIME.split(",") if m.strip()]
+
     # Pydantic Configuration
     model_config = SettingsConfigDict(
         env_file=".env",

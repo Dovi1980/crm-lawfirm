@@ -6,7 +6,28 @@ Todas las versiones notables del proyecto se documentan acá. Formato basado en 
 
 ## [Unreleased]
 
-Sin cambios pendientes.
+### v2.0.1b (pendiente)
+- Crear expediente pre-llenado a partir de un documento escaneado (cuando el caso no existe).
+
+---
+
+## [2.0.1a] — 2026-06-25 — Adjuntos + lectura por IA
+
+### Added
+
+- **Capa multimodal en `BaseAIProvider`**: nuevo `AIAttachment` (mime_type, data, filename) y campo `attachments` en `AIMessage`. El adaptador de Gemini envía `inline_data` (base64). Anthropic y OpenAI rechazan adjuntos con un `ProviderError` claro (multimodal pendiente en esos adaptadores).
+- **Modelo `Attachment`** + migración `c3d4e5f6a7b8`: documentación escaneada por caso, binario en volumen Docker (`attachments_data`), metadata en DB.
+- **Storage** en `services/attachment_storage.py`: guarda con nombre UUID, lectura/borrado con protección anti path-traversal.
+- **Endpoints de adjuntos** (`/api/cases/{id}/attachments/`): upload (valida MIME + tamaño máx. 15 MB), list, download (Content-Disposition sanitizado), delete (assistant no puede). RBAC heredado de `get_scoped_case`.
+- **Análisis IA de adjuntos** (`POST /api/ai/cases/{id}/attachments/{aid}/analyze`, SSE): lee el documento con Gemini multimodal y devuelve un resumen + un texto listo para cargar como gestión.
+- **UI `CaseAttachmentsSection`**: subida de archivos, listado con descargar/eliminar/analizar, panel de análisis en streaming, y "Cargar como gestión" que pre-llena y guarda una interacción en el historial.
+- Config nueva: `UPLOAD_DIR`, `MAX_UPLOAD_MB`, `ALLOWED_UPLOAD_MIME`.
+- Volumen `attachments_data` en `docker-compose.yml` y `docker-compose.prod.yml` (montado en `/data/attachments`).
+- 7 tests nuevos: upload + validación de tipo, RBAC, descarga, assistant no borra, shape multimodal de Gemini, rechazo de adjuntos en providers text-only.
+
+### Added (datos)
+
+- `backend/seed_demo.py`: script idempotente que carga 2 abogados, 5 clientes, 5 expedientes con gestiones realistas y 2 tareas, para que las funciones de IA luzcan en demos.
 
 ---
 

@@ -22,6 +22,7 @@
 - **Resumen ejecutivo del caso** con un click
 - **Redacción asistida de documentos** con templates de sistema (carta documento, intimación de cobro, escrito de presentación, convenio de honorarios) **+ templates personalizables por admin desde la UI**
 - **Exportación a DOCX y PDF** sin dependencias de sistema (puro Python)
+- **Lectura de documentación escaneada** (PDF/imagen): se adjunta al expediente y la IA lo lee, lo resume y ofrece cargarlo como gestión en el historial (multimodal, vía Gemini)
 - Streaming en vivo (SSE) — el usuario ve el documento mientras se redacta
 
 ### Seguridad
@@ -232,6 +233,9 @@ crm-lawfirm/
 | Generar borrador | `POST /api/ai/cases/{id}/document/generate` | SSE streaming |
 | Documentos guardados | `GET /api/cases/{id}/documents/` | persistidos por caso |
 | Exportar DOCX o PDF | `GET /api/cases/{id}/documents/{doc_id}/export?format=docx\|pdf` | descarga directa |
+| Adjuntar documentación | `POST /api/cases/{id}/attachments/` | PDF/imagen, máx. 15 MB |
+| Listar / descargar adjuntos | `GET /api/cases/{id}/attachments/` , `.../{aid}/download` | RBAC por caso |
+| Leer adjunto con IA | `POST /api/ai/cases/{id}/attachments/{aid}/analyze` | SSE — resumen + texto para gestión |
 | Templates admin | `GET /api/templates/catalog` (todos), `POST/PUT/DELETE /api/templates/` (solo admin) | gestión del catálogo |
 
 Documentación OpenAPI interactiva: **[http://localhost/api/docs](http://localhost/api/docs)**

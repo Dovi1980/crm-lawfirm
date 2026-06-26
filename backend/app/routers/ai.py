@@ -15,14 +15,19 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy import select
+
 from app.database import get_db
 from app.middleware.security import get_current_active_user
+from app.models.attachment import Attachment
 from app.models.user import User
 from app.routers.cases import get_scoped_case
 from app.schemas.ai import ChatRequest, SummaryResponse
 from app.schemas.document import DocumentGenerateRequest, TemplateSchema
+from app.services import attachment_storage
 from app.services.ai import AIMessage, ProviderError
 from app.services.ai_service import (
+    stream_analyze_attachment,
     stream_case_chat,
     stream_document_draft,
     stream_general_assistant,
@@ -130,6 +135,42 @@ async def generate_document_draft(
         raise HTTPException(status_code=404, detail="Template no encontrado")
 
     generator = stream_document_draft(db, case_id, template, payload.variables)
+    return StreamingResponse(
+        _wrap_sse(generator),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/cases/{case_id}/attachments/{attachment_id}/analyze")
+async def analyze_attachment(
+    case_id: int,
+    attachment_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Lee un adjunto escaneado con IA multimodal y streamea análisis + texto para gestión."""
+    await get_scoped_case(case_id, db, current_user)
+
+    stmt = select(Attachment).where(
+        Attachment.id == attachment_id, Attachment.case_id == case_id
+    )
+    att = (await db.execute(stmt)).scalar_one_or_none()
+    if not att:
+        raise HTTPException(status_code=404, detail="Adjunto no encontrado")
+
+    try:
+        data = attachment_storage.read_bytes(att.stored_filename)
+    except FileNotFoundError:
+        raise HTTPException(status_code=410, detail="El archivo ya no está disponible en el servidor")
+
+    generator = stream_analyze_attachment(
+        case_id=case_id,
+        file_bytes=data,
+        mime_type=att.mime_type,
+        filename=att.filename,
+        db=db,
+    )
     return StreamingResponse(
         _wrap_sse(generator),
         media_type="text/event-stream",
