@@ -13,13 +13,19 @@ from app.main import app
 
 
 def _interaction_routes_by_method(method: str) -> list[str]:
-    """Return paths under /interactions that respond to the given HTTP method."""
-    method = method.upper()
+    """
+    Return paths under /interactions that expose the given HTTP method.
+
+    Reads the OpenAPI schema instead of walking `app.routes` directly: newer
+    FastAPI (>=0.138) no longer flattens included routers into `app.routes`
+    (they become opaque `_IncludedRouter` objects), so the schema is the
+    version-stable source of truth for the declared route table.
+    """
+    method = method.lower()
+    schema = app.openapi()
     matches = []
-    for route in app.routes:
-        path = getattr(route, "path", "")
-        methods = getattr(route, "methods", None) or set()
-        if "/interactions" in path and method in methods:
+    for path, operations in schema.get("paths", {}).items():
+        if "/interactions" in path and method in operations:
             matches.append(path)
     return matches
 
