@@ -15,7 +15,7 @@ CRM web full-stack para estudios jurídicos chicos / medianos (2-20 letrados), e
 - **IA integrada** con capa universal (Anthropic / OpenAI / Gemini intercambiables vía variable de entorno) que cubre: resumen de caso, chat con contexto del expediente, asistente flotante global, **redacción asistida de documentos** con templates de sistema + templates personalizables desde la UI por admin.
 - **Exportación DOCX y PDF** de los documentos generados, sin dependencias de sistema.
 
-Estado funcional: **v0.3** (fases 1-3 completas). 31 tests verdes. Ver `CHANGELOG.md`.
+Estado funcional: **v2.0.1a** (fases 1-3 + adjuntos por caso con lectura multimodal por IA). 39 tests verdes. Ver `CHANGELOG.md`.
 
 ---
 
@@ -59,7 +59,7 @@ python -m venv .venv && .venv/bin/activate    # (.venv\Scripts\activate en Windo
 pip install -r requirements-dev.txt
 
 # Cada corrida:
-pytest                                # 31 tests, ~13s; usa sqlite in-memory
+pytest                                # 39 tests, ~20s; usa sqlite in-memory
 pytest tests/test_auth.py -v          # un archivo concreto
 pytest -k "rbac"                      # filtrar por nombre
 ```
@@ -141,7 +141,10 @@ El proyecto **no tiene linter configurado todavía**. Si lo agregás, propónelo
 | Catálogo de templates de sistema | `backend/app/services/document_templates.py` |
 | Templates persistidos (admin) | `backend/app/routers/templates.py` + `models/custom_template.py` |
 | Render DOCX/PDF | `backend/app/services/document_export.py` |
+| Adjuntos (upload/storage) | `backend/app/routers/attachments.py` + `services/attachment_storage.py` + `models/attachment.py` |
+| Lectura multimodal de adjuntos | `services/ai_service.py:stream_analyze_attachment` + `services/ai/gemini_provider.py` |
 | SPA shell / asistente flotante | `frontend/src/components/Layout.jsx` + `components/ai/FloatingAssistant.jsx` |
+| Subida + análisis IA de adjuntos (UI) | `frontend/src/components/ai/CaseAttachmentsSection.jsx` |
 | Streaming SSE en cliente | `frontend/src/hooks/useAIStream.js` |
 | Wizard de redacción | `frontend/src/components/ai/DocumentDraftModal.jsx` |
 | Cookie HttpOnly y auth en cliente | `frontend/src/api/axiosClient.js` + `context/AuthContext.jsx` |
@@ -152,7 +155,7 @@ El proyecto **no tiene linter configurado todavía**. Si lo agregás, propónelo
 
 Estas reglas están enforced por tests, por compliance legal o por seguridad. Romperlas en silencio es la principal forma en que un agente de IA puede causar daño en este repo.
 
-1. **Las interacciones son append-only.** No agregar rutas `PUT`, `PATCH` o `DELETE` en `routers/interactions.py`. `tests/test_immutability.py` lee la tabla de rutas de FastAPI y falla si las detecta. Esto es un requisito legal del estudio jurídico, no preferencia técnica.
+1. **Las interacciones son append-only.** No agregar rutas `PUT`, `PATCH` o `DELETE` en `routers/interactions.py`. `tests/test_immutability.py` lee la tabla de rutas vía `app.openapi()` y falla si las detecta. Esto es un requisito legal del estudio jurídico, no preferencia técnica.
 
 2. **El refresh token vive en cookie HttpOnly con `Path=/api/auth`.** No moverlo a localStorage, no expandir el scope del cookie. El cliente nunca debe tener acceso JavaScript al refresh.
 
@@ -166,7 +169,13 @@ Estas reglas están enforced por tests, por compliance legal o por seguridad. Ro
 
 7. **RBAC de Lawyer en `cases`**: el helper `get_scoped_case()` en `routers/cases.py` filtra por `assigned_lawyer_id == current_user.id` para lawyers. Cualquier ruta que sirva datos de un caso a un lawyer **debe** pasar por ese helper. Los endpoints de IA reutilizan `get_scoped_case` por eso mismo.
 
-8. **`Assistant` no borra**. Para cada operación destructiva nueva, agregar el check `if current_user.role == UserRole.ASSISTANT: raise 403`. Documentos: el archive (soft delete) ya hace ese check; replicar el patrón.
+8. **`Assistant` no borra**. Para cada operación destructiva nueva, agregar el check `if current_user.role == UserRole.ASSISTANT: raise 403`. Documentos y adjuntos ya lo hacen; replicar el patrón.
+
+9. **Adjuntos: binario en disco, metadata en DB.** El archivo va al volumen Docker (`settings.UPLOAD_DIR`) con nombre UUID; nunca usar el nombre original para la ruta en disco. Lectura/borrado siempre vía `os.path.basename` (anti path-traversal). Validar MIME y tamaño en el upload.
+
+10. **Multimodal: hoy solo Gemini.** `AIMessage.attachments` lo consume el adaptador de Gemini (`inline_data`); Anthropic/OpenAI llaman `reject_attachments_if_present()`. Si agregás multimodal a otro proveedor, hacelo en su adaptador, no en `ai_service.py`.
+
+11. **Gemini 2.5+ piensa y consume `maxOutputTokens`.** En `gemini_provider.py`, `maxOutputTokens = max_tokens + thinking_budget` y `_thinking_budget()` desactiva thinking en `flash`/`lite` (Pro no lo permite). No volver a poner `maxOutputTokens = max_tokens` solo, o el texto se corta a mitad.
 
 ---
 
@@ -216,9 +225,10 @@ backend/tests/
 ├── test_main.py         # health check
 ├── test_auth.py         # auth flow + cookie + rotación
 ├── test_rbac.py         # scoping por rol en cases
-├── test_immutability.py # verifica tabla de rutas de FastAPI
+├── test_immutability.py # verifica rutas vía app.openapi() (estable entre versiones)
 ├── test_export.py       # parser markdown + magic bytes DOCX/PDF
-└── test_templates.py    # CRUD admin + merge built-in/custom
+├── test_templates.py    # CRUD admin + merge built-in/custom
+└── test_attachments.py  # upload + RBAC + multimodal Gemini + thinking budget
 ```
 
 Patrones que conviene seguir:
@@ -251,6 +261,9 @@ Patrones que conviene seguir:
 - **`nginx/Dockerfile.prod` contexto de build**: el `context` en `docker-compose.prod.yml` es `.` (raíz), no `./nginx`. Esto es así para que pueda copiar `frontend/` al build stage. Si lo cambiás, va a romper.
 - **El frontend no tiene tipos**. No agregar TypeScript a medias — o el front entero o ninguno. Si lo discutís con el dueño del proyecto y deciden migrar, hacelo en un PR aparte completo.
 - **SECRET_KEY de tests**: el `conftest.py` setea un valor fijo (`test_secret_key_for_pytest_runs_only_not_real`). No usar ese valor en ningún otro lado.
+- **`requirements.txt` usa `>=` → CI instala lo último**. Esto ya rompió una vez (FastAPI 0.138 dejó de aplanar routers en `app.routes`). Si un test inspecciona internals de una librería, preferí su API pública estable (ej. `app.openapi()` en vez de `app.routes`). Si CI falla pero local pasa, sospechá de una versión más nueva: reproducí con `pip install "fastapi==<ver-de-CI>"`.
+- **Adjuntos en tests**: el `conftest.py` apunta `UPLOAD_DIR` a un tempdir descartable. No asumas `/data/attachments` en tests.
+- **Gemini 2.5 "thinking"**: si un output de IA sale cortado a mitad de frase, casi seguro es `finishReason: MAX_TOKENS` por thinking — ver invariante #11.
 
 ---
 
@@ -308,4 +321,4 @@ Checklist mental:
 
 ---
 
-*Última revisión de este archivo: 2026-06-24 (v0.3).* Si la realidad del repo se aleja de lo descrito acá, actualizá esta guía en el mismo commit que el cambio.
+*Última revisión de este archivo: 2026-06-26 (v2.0.1a).* Si la realidad del repo se aleja de lo descrito acá, actualizá esta guía en el mismo commit que el cambio.

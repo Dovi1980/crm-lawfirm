@@ -6,11 +6,12 @@ Bitácora viva del proyecto. Debe actualizarse al final de cada sesión de traba
 
 ## 📅 Información de control
 
-- **Última actualización:** 2026-06-24
-- **Rama Git activa:** `main`
-- **Versión funcional:** v0.3 (Fase 3 completa — redacción asistida + export + templates dinámicos)
-- **Tests:** 31/31 ✅ (sqlite-in-memory para unit; Postgres real en CI)
-- **Build frontend:** ~393 KB / 112 KB gzip
+- **Última actualización:** 2026-06-26
+- **Rama Git activa:** `main` (último commit `6ba4b71`)
+- **Versión funcional:** v2.0.1a (adjuntos por caso + lectura multimodal por IA)
+- **Tests:** 39/39 ✅ (sqlite-in-memory para unit; Postgres real en CI)
+- **Build frontend:** ~404 KB / 114 KB gzip
+- **Proveedor IA en uso:** Gemini (`gemini-2.5-flash` por defecto, `gemini-2.5-pro` para redacción pesada)
 - **Despliegue local:** Docker Compose (Postgres, FastAPI, React/Vite, Nginx) — dev y prod separados
 
 ---
@@ -72,6 +73,19 @@ Toda la app consume una interfaz abstracta `BaseAIProvider`. El switch entre pro
 - Página admin `/templates` con cards built-in (badge "Sistema") vs custom (editables)
 - Modal con form: clave, nombre, descripción, instrucción para el modelo, editor dinámico de variables
 
+### v2.0.1a — Documentación escaneada + lectura multimodal por IA
+- Capa de IA ahora **multimodal**: `AIAttachment` (mime_type, data, filename) + campo `attachments` en `AIMessage`. Gemini envía `inline_data` base64; Anthropic/OpenAI rechazan adjuntos con `ProviderError` claro (multimodal pendiente en esos adaptadores).
+- Modelo `Attachment` (binario en volumen Docker `attachments_data`, metadata en DB) + migración `c3d4e5f6a7b8`.
+- `services/attachment_storage.py`: guarda con nombre UUID, protección anti path-traversal.
+- Endpoints `/api/cases/{id}/attachments/`: upload (valida MIME + tamaño 15 MB), list, download, delete (assistant no puede).
+- Análisis IA: `POST /api/ai/cases/{id}/attachments/{aid}/analyze` (SSE) — lee el documento con Gemini multimodal y devuelve resumen + texto listo para cargar como gestión.
+- UI `CaseAttachmentsSection`: subida, listado, panel de análisis en streaming, "Cargar como gestión" que pre-llena y guarda una interacción.
+- **Fix Gemini 2.5**: los modelos "piensan" por defecto y esos tokens salían del presupuesto de salida → el texto se cortaba. Solución: presupuesto de salida separado del thinking + thinking deshabilitado en modelos `flash` + reintento automático en 503/429.
+- `seed_demo.py`: datos de demostración (2 abogados, 5 clientes, 5 expedientes con gestiones, 2 tareas).
+
+### Fix de CI (2026-06-26)
+- `test_immutability.py` fallaba en CI porque FastAPI ≥0.138 / Starlette ≥1.3 dejaron de aplanar los routers incluidos en `app.routes` (ahora son objetos opacos `_IncludedRouter`). Como `requirements.txt` usa `>=`, CI instala siempre lo último y rompió el helper que recorría `app.routes`. Reescrito para leer el schema OpenAPI (`app.openapi()`), estable entre versiones.
+
 ---
 
 ## 🧪 Cobertura de tests
@@ -84,7 +98,10 @@ Toda la app consume una interfaz abstracta `BaseAIProvider`. El switch entre pro
 | `test_immutability.py` | No existen rutas PUT/PATCH/DELETE en `/interactions` (verifica tabla de rutas + runtime) | 6 |
 | `test_export.py` | Parser de markdown distingue bloques, DOCX produce ZIP válido, PDF produce magic bytes | 4 |
 | `test_templates.py` | Admin CRUD, lawyer no puede crear, no se puede shadowizar built-in, duplicados rechazados, catalog list | 8 |
-| **Total** | | **31** |
+| `test_attachments.py` | Upload + validación de tipo, RBAC, descarga, assistant no borra, shape multimodal de Gemini, thinking budget, rechazo de adjuntos en providers text-only | 8 |
+| **Total** | | **39** |
+
+> El helper de `test_immutability.py` lee el schema OpenAPI (`app.openapi()`), no `app.routes`, para ser estable ante cambios de FastAPI (ver Fix de CI arriba).
 
 ---
 
@@ -97,14 +114,21 @@ Toda la app consume una interfaz abstracta `BaseAIProvider`. El switch entre pro
 5. **SSE con `fetch`, no `EventSource`.** EventSource no permite Authorization header. Se parsea el stream a mano (~30 líneas en `useAIStream`).
 6. **Multi-proveedor desde el día 1.** No hay `import anthropic` fuera de `anthropic_provider.py`. Aplicar el mismo patrón si se agrega Mistral/Cohere/Bedrock.
 7. **Export sin deps de sistema.** Se descartó WeasyPrint (necesita Cairo/Pango); python-docx + reportlab son puro Python y mantienen el image chico.
+8. **Adjuntos: binario en disco, metadata en DB.** El archivo va al volumen Docker con nombre UUID; la DB solo guarda el mapeo. Lectura/borrado siempre vía `os.path.basename` (anti path-traversal).
+9. **Multimodal solo en Gemini (hoy).** La lectura de PDF/imagen funciona con Gemini; Anthropic/OpenAI devuelven `ProviderError` claro si reciben adjuntos. Agregarlo en esos adaptadores es localizado (~30 LOC c/u).
+10. **Gemini 2.5 "piensa" y consume `maxOutputTokens`.** Siempre dar al texto su presupuesto ADEMÁS del de thinking, y desactivar thinking en modelos `flash` (`thinkingBudget: 0`); Pro no permite desactivarlo. Si no, el texto se corta a mitad.
+11. **Tests de rutas: usar `app.openapi()`, no `app.routes`.** FastAPI ≥0.138 no aplana los routers incluidos; el schema OpenAPI es la fuente estable.
 
 ---
 
 ## 🛣️ Próximos pasos sugeridos (no comprometidos)
 
+**Siguiente planificado — v2.0.1b:** que la IA cree el expediente **pre-llenado** a partir de un documento escaneado cuando el caso todavía no existe (la IA propone los campos; el abogado revisa y confirma — nunca creación silenciosa).
+
 | Idea | Costo aprox | Cuándo conviene |
 | :--- | :--- | :--- |
 | Audit log de quién leyó qué documento | medio | Cuando el cliente lo pida por compliance |
+| Pinear versiones / `requirements.lock` | bajo | Para builds reproducibles (CI ya rompió una vez por `>=`) |
 | Versión multi-tenant (mismo deploy, varios estudios) | alto | Solo si el negocio crece a SaaS |
 | Plantillas DOCX cargadas por el usuario (no Markdown) | medio | Si se piden "membrete del estudio" en exports |
 | Adapter Mistral / Bedrock | bajo | Cuando un cliente lo pida (~70 LOC + tests) |

@@ -128,7 +128,7 @@ FIRST_ADMIN_PASSWORD=CambiarEstoEnProd!
 
 ## 🧪 Tests
 
-31 tests cubriendo: auth + cookie HttpOnly + rotación, RBAC en casos y documentos, inmutabilidad de interacciones, exportación DOCX/PDF, CRUD de templates personalizados con `is_builtin` flag.
+39 tests cubriendo: auth + cookie HttpOnly + rotación, RBAC en casos/documentos/adjuntos, inmutabilidad de interacciones (vía OpenAPI), exportación DOCX/PDF, CRUD de templates personalizados, y adjuntos + lectura multimodal por IA.
 
 ```bash
 cd backend
