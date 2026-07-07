@@ -68,6 +68,18 @@ async def test_upload_rejects_invalid_type(client, lawyer_user, case_for_lawyer)
 
 
 @pytest.mark.asyncio
+async def test_upload_rejects_content_type_spoofing(client, lawyer_user, case_for_lawyer):
+    """Declarar image/png pero mandar contenido que no es imagen → rechazado por magic bytes."""
+    token = await login(client, "lawyer@test.com", "LawyerPass123!")
+    resp = await client.post(
+        f"/api/cases/{case_for_lawyer.id}/attachments/",
+        headers=auth_headers(token),
+        files={"file": ("fake.png", b"<html><script>alert(1)</script></html>", "image/png")},
+    )
+    assert resp.status_code == 415
+
+
+@pytest.mark.asyncio
 async def test_lawyer_cannot_upload_to_other_case(client, other_lawyer_user, case_for_lawyer):
     # case_for_lawyer pertenece a lawyer_user; lawyer2 no debe poder subir
     token = await login(client, "lawyer2@test.com", "LawyerPass123!")

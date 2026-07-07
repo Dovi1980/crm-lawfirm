@@ -14,6 +14,11 @@ from app.models.user import User
 # Using bcrypt with rounds=12 by default for passlib
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+# Precomputed dummy hash. Used to run a real bcrypt verify on the "user not found"
+# path so login response time doesn't reveal whether an email exists (anti-enumeration).
+_DUMMY_HASH = pwd_context.hash("dummy_password_for_constant_time_check")
+
+
 class AuthService:
     @staticmethod
     def hash_password(password: str) -> str:
@@ -25,6 +30,27 @@ class AuthService:
             return pwd_context.verify(plain_password, hashed_password)
         except Exception:
             return False
+
+    @staticmethod
+    def dummy_verify(plain_password: str) -> None:
+        """Run a bcrypt verify against a dummy hash to equalize timing on the miss path."""
+        try:
+            pwd_context.verify(plain_password, _DUMMY_HASH)
+        except Exception:
+            pass
+
+    @classmethod
+    async def revoke_all_user_tokens(cls, db: AsyncSession, user_id: int) -> int:
+        """Revoke every active refresh token for a user (e.g. after a password change)."""
+        from sqlalchemy import update
+        stmt = (
+            update(RefreshToken)
+            .where(RefreshToken.user_id == user_id, RefreshToken.revoked == False)  # noqa: E712
+            .values(revoked=True)
+        )
+        result = await db.execute(stmt)
+        await db.commit()
+        return result.rowcount or 0
 
     @staticmethod
     def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:

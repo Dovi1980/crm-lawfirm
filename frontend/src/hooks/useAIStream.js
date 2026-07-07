@@ -1,4 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
+import { getAccessToken } from '../api/tokenStore'
+import { silentRefresh } from '../api/axiosClient'
 
 /**
  * Streaming SSE consumer for /ai/* endpoints.
@@ -25,19 +27,28 @@ export function useAIStream({ onChunk, onDone, onError } = {}) {
     abortRef.current?.abort()
     abortRef.current = new AbortController()
 
-    const token = localStorage.getItem('accessToken')
-    const headers = { 'Content-Type': 'application/json' }
-    if (token) headers['Authorization'] = `Bearer ${token}`
+    // Access token lives in memory; refresh silently if missing (e.g. after reload).
+    let token = getAccessToken() || await silentRefresh()
+
+    const doFetch = (bearer) => fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      signal: abortRef.current.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
+      },
+      body: JSON.stringify(body),
+    })
 
     let assembled = ''
     try {
-      const resp = await fetch(url, {
-        method: 'POST',
-        credentials: 'include',
-        signal: abortRef.current.signal,
-        headers,
-        body: JSON.stringify(body),
-      })
+      let resp = await doFetch(token)
+      // Token expired mid-session → refresh once and retry.
+      if (resp.status === 401) {
+        token = await silentRefresh()
+        if (token) resp = await doFetch(token)
+      }
       if (!resp.ok) {
         const detail = await resp.text().catch(() => '')
         throw new Error(`HTTP ${resp.status}${detail ? `: ${detail}` : ''}`)

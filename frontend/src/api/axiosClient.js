@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { getAccessToken, setAccessToken, clearAccessToken } from './tokenStore'
 
 const axiosClient = axios.create({
   baseURL: '/api',
@@ -9,10 +10,10 @@ const axiosClient = axios.create({
   withCredentials: true,
 })
 
-// Request Interceptor: inject access token from in-memory/localStorage.
+// Request Interceptor: inject the in-memory access token.
 axiosClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('accessToken')
+    const token = getAccessToken()
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
@@ -34,6 +35,22 @@ async function performRefresh() {
   return response.data.access_token
 }
 
+/**
+ * Silent refresh used on app load: exchanges the HttpOnly refresh cookie for a
+ * fresh access token (kept in memory). Returns the token, or null if there's no
+ * valid session. Does not redirect.
+ */
+export async function silentRefresh() {
+  try {
+    const token = await performRefresh()
+    setAccessToken(token)
+    return token
+  } catch {
+    clearAccessToken()
+    return null
+  }
+}
+
 axiosClient.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -52,10 +69,11 @@ axiosClient.interceptors.response.use(
         }
         const newAccessToken = await refreshInFlight
 
-        localStorage.setItem('accessToken', newAccessToken)
+        setAccessToken(newAccessToken)
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`
         return axiosClient(originalRequest)
       } catch (refreshError) {
+        clearAccessToken()
         localStorage.clear()
         if (window.location.pathname !== '/login') {
           window.location.href = '/login'

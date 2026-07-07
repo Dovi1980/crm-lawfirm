@@ -12,7 +12,8 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      # Bind to loopback only — no LAN exposure of the DB. (dev convenience)
+      - "127.0.0.1:5432:5432"
     networks:
       - crm_network
     healthcheck:
@@ -27,12 +28,13 @@ services:
       dockerfile: Dockerfile
     container_name: crm_backend
     restart: always
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --proxy-headers --forwarded-allow-ips="*"
     volumes:
       - ./backend:/app
       - attachments_data:/data/attachments
     ports:
-      - "8000:8000"
+      # Loopback only — reach the API through nginx (:80). Direct :8000 stays local.
+      - "127.0.0.1:8000:8000"
     env_file:
       - .env
     environment:

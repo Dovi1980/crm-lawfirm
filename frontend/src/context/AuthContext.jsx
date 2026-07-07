@@ -1,23 +1,43 @@
 import React, { createContext, useState, useEffect } from 'react'
-import axiosClient from '../api/axiosClient'
+import axiosClient, { silentRefresh } from '../api/axiosClient'
+import { setAccessToken, clearAccessToken } from '../api/tokenStore'
 
 export const AuthContext = createContext(null)
+
+// Profile keys kept in localStorage for instant UI (NOT the access token).
+const PROFILE_KEYS = ['userEmail', 'userRole', 'userName']
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Restore session from localStorage (refresh token lives in HttpOnly cookie).
-    const token = localStorage.getItem('accessToken')
-    const email = localStorage.getItem('userEmail')
-    const role = localStorage.getItem('userRole')
-    const name = localStorage.getItem('userName')
+    // On load the access token lives only in memory (lost on reload). If we have
+    // a stored profile, try a silent refresh via the HttpOnly cookie to restore
+    // the session transparently — the user stays logged in across reloads.
+    let cancelled = false
 
-    if (token && email && role && name) {
-      setUser({ email, role, name })
+    const restore = async () => {
+      const email = localStorage.getItem('userEmail')
+      const role = localStorage.getItem('userRole')
+      const name = localStorage.getItem('userName')
+
+      if (email && role && name) {
+        const token = await silentRefresh()
+        if (cancelled) return
+        if (token) {
+          setUser({ email, role, name })
+        } else {
+          // Refresh cookie expired/revoked → clean up.
+          localStorage.clear()
+          clearAccessToken()
+        }
+      }
+      if (!cancelled) setLoading(false)
     }
-    setLoading(false)
+
+    restore()
+    return () => { cancelled = true }
   }, [])
 
   const login = async (email, password) => {
@@ -25,8 +45,8 @@ export const AuthProvider = ({ children }) => {
       const response = await axiosClient.post('/auth/login', { email, password })
       const { access_token, role, user_email, user_name } = response.data
 
-      // Refresh token is set server-side as HttpOnly cookie — not stored here.
-      localStorage.setItem('accessToken', access_token)
+      // Access token → memory only. Refresh token → HttpOnly cookie (server-side).
+      setAccessToken(access_token)
       localStorage.setItem('userRole', role)
       localStorage.setItem('userEmail', user_email)
       localStorage.setItem('userName', user_name)
@@ -47,6 +67,7 @@ export const AuthProvider = ({ children }) => {
     } catch (e) {
       console.error('Failed to revoke session on server', e)
     }
+    clearAccessToken()
     localStorage.clear()
     setUser(null)
   }

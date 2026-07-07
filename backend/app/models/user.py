@@ -1,8 +1,8 @@
 import enum
 from datetime import datetime
-from sqlalchemy import String, Boolean, DateTime, Enum, func
+from typing import List, Optional
+from sqlalchemy import String, Boolean, DateTime, Enum, Integer, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from typing import List
 
 from app.database import Base
 
@@ -21,7 +21,11 @@ class User(Base):
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), nullable=False, default=UserRole.LAWYER)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    
+
+    # Brute-force lockout state (persisted so it works across workers/restarts).
+    failed_login_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 

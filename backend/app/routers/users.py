@@ -106,9 +106,14 @@ async def update_user(
 
     update_data = payload.model_dump(exclude_unset=True)
 
+    password_changed = False
     if "password" in update_data and update_data["password"]:
         user.hashed_password = AuthService.hash_password(update_data["password"])
         update_data.pop("password")
+        password_changed = True
+
+    # If an admin deactivates or changes the password of a user, kill their sessions.
+    deactivated = update_data.get("is_active") is False
 
     for key, value in update_data.items():
         setattr(user, key, value)
@@ -116,6 +121,10 @@ async def update_user(
     db.add(user)
     await db.commit()
     await db.refresh(user)
+
+    if password_changed or deactivated:
+        await AuthService.revoke_all_user_tokens(db, user.id)
+
     return user
 
 

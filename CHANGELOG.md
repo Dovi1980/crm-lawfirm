@@ -11,6 +11,29 @@ Todas las versiones notables del proyecto se documentan acá. Formato basado en 
 
 ---
 
+## [2.0.2] — 2026-07-06 — Hardening de seguridad (auditoría)
+
+### Security
+
+- **Rate limiter funcional detrás del proxy:** uvicorn ahora corre con `--proxy-headers --forwarded-allow-ips="*"` en ambos compose, así el limiter ve la IP real del cliente (antes veía la de nginx → límite global que bloqueaba a todo el estudio).
+- **Lockout de cuenta persistido en DB:** se movió el conteo de intentos fallidos de dicts en memoria (por worker, se perdían al reiniciar) a columnas `failed_login_count` / `locked_until` en `users` (migración `d4e5f6a7b8c9`). Configurable con `LOGIN_MAX_ATTEMPTS` / `LOCKOUT_MINUTES`.
+- **Reset de contraseña revoca todas las sesiones:** `reset_password` (y `update_user` al cambiar password o desactivar) ahora revoca todos los refresh tokens del usuario — un token robado no sobrevive a la recuperación de cuenta.
+- **Login sin enumeración por timing:** se verifica contra un hash dummy en el path de "usuario inexistente" para igualar el tiempo de respuesta.
+- **Soft-delete de expedientes:** `DELETE /cases/{id}` archiva (status ARCHIVADO) en vez de hard-delete, preservando las interacciones append-only (antes el cascade las destruía).
+- **Validación de magic bytes en adjuntos:** se valida la firma real del archivo (PDF/PNG/JPEG/WEBP), no el `Content-Type` del cliente; se persiste el MIME detectado.
+- **Access token fuera de localStorage:** el token vive solo en memoria (`tokenStore.js`); al cargar la app se hace un refresh silencioso vía la cookie HttpOnly para no desloguear al usuario. Reduce el impacto de un XSS.
+- **Guards de arranque en producción:** con `APP_ENV=production`, la app aborta si `COOKIE_SECURE=False`, si el rate limiter está apagado o si `SECRET_KEY` es el de ejemplo. `/api/docs` y OpenAPI se ocultan en producción.
+- **BASE_URL para links de email:** el link de reset usa `settings.BASE_URL` (https en prod) en vez de `http://localhost` hardcodeado.
+- **Puertos de dev atados a loopback:** Postgres y el backend se publican en `127.0.0.1` (no en la LAN) en `docker-compose.yml`.
+
+### Config nueva
+- `APP_ENV`, `BASE_URL`, `LOGIN_MAX_ATTEMPTS`, `LOCKOUT_MINUTES` en `.env.example`.
+
+### Tests
+- 44 verdes (5 nuevos): lockout tras N intentos, revocación de sesiones en reset, timing de usuario inexistente, soft-delete preserva interacciones, rechazo de spoofing de Content-Type en adjuntos.
+
+---
+
 ## [2.0.1a] — 2026-06-25 — Adjuntos + lectura por IA
 
 ### Added

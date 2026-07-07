@@ -30,6 +30,23 @@ def _sanitize_filename(name: str) -> str:
     return cleaned or "documento"
 
 
+def _sniff_mime(data: bytes) -> str | None:
+    """
+    Detect the real MIME from the file's magic bytes. Returns the canonical MIME
+    or None if it's not a recognized PDF/PNG/JPEG/WEBP. This is the authoritative
+    check — the client-supplied Content-Type is not trusted for storage.
+    """
+    if data.startswith(b"%PDF"):
+        return "application/pdf"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if len(data) >= 12 and data[0:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
 @router.get("/", response_model=List[AttachmentResponse])
 async def list_attachments(
     case_id: int,
@@ -54,12 +71,12 @@ async def upload_attachment(
 ):
     await get_scoped_case(case_id, db, current_user)
 
-    # 1. Validate MIME type
-    mime = (file.content_type or "").lower()
-    if mime not in settings.allowed_upload_mime:
+    # 1. Fast reject on declared type (cheap first gate)
+    declared = (file.content_type or "").lower()
+    if declared not in settings.allowed_upload_mime:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail=f"Tipo de archivo no permitido ({mime or 'desconocido'}). "
+            detail=f"Tipo de archivo no permitido ({declared or 'desconocido'}). "
                    f"Permitidos: PDF, PNG, JPG, WEBP.",
         )
 
@@ -74,13 +91,23 @@ async def upload_attachment(
     if not data:
         raise HTTPException(status_code=400, detail="El archivo está vacío.")
 
-    # 3. Persist to disk + DB
-    stored = attachment_storage.save_bytes(data, mime)
+    # 3. Authoritative check: verify the REAL file signature. The client-supplied
+    #    Content-Type is not trusted — an attacker can't store arbitrary content
+    #    by lying about it. We persist the sniffed MIME, which is what download serves.
+    real_mime = _sniff_mime(data)
+    if real_mime is None or real_mime not in settings.allowed_upload_mime:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="El contenido del archivo no corresponde a un PDF/PNG/JPG/WEBP válido.",
+        )
+
+    # 4. Persist to disk + DB (using the verified MIME)
+    stored = attachment_storage.save_bytes(data, real_mime)
     att = Attachment(
         case_id=case_id,
         filename=_sanitize_filename(file.filename),
         stored_filename=stored,
-        mime_type=mime,
+        mime_type=real_mime,
         size_bytes=len(data),
         uploaded_by_id=current_user.id,
     )

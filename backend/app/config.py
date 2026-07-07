@@ -8,8 +8,24 @@ class Settings(BaseSettings):
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api"
 
+    # Deployment environment: "development" | "production".
+    # In production the app enforces hardened defaults (see app.main startup guard).
+    APP_ENV: str = "development"
+
+    # Public base URL used to build links in outbound emails (password reset).
+    # In production set to the real https origin, e.g. https://crm.tuestudio.com
+    BASE_URL: str = "http://localhost"
+
     # Rate Limiting
     ENABLE_RATE_LIMITER: bool = True
+
+    # Account lockout (brute-force protection, persisted in DB)
+    LOGIN_MAX_ATTEMPTS: int = 10   # intentos fallidos consecutivos antes de bloquear
+    LOCKOUT_MINUTES: int = 15      # duración del bloqueo
+
+    @property
+    def is_production(self) -> bool:
+        return self.APP_ENV.strip().lower() in ("production", "prod")
 
     # Database
     DATABASE_URL: str

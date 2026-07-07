@@ -171,16 +171,20 @@ async def delete_case(
     current_user: User = Depends(get_current_active_user)
 ):
     """
-    Remove case record. Assistants are barred from executing deletions.
-    Lawyers can only delete their own cases.
+    Archive a case (soft delete). Assistants are barred; lawyers only their own.
+
+    We do NOT hard-delete: a hard delete would cascade-remove the case's
+    interactions, which are append-only by legal requirement. Instead the case
+    is moved to ARCHIVADO, preserving the full history.
     """
     if current_user.role == UserRole.ASSISTANT:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Los asistentes no tienen autorización para eliminar expedientes."
+            detail="Los asistentes no tienen autorización para archivar expedientes."
         )
 
     case = await get_scoped_case(case_id, db, current_user)
-    await db.delete(case)
+    case.status = CaseStatus.ARCHIVADO
+    db.add(case)
     await db.commit()
-    return {"detail": "Expediente eliminado correctamente"}
+    return {"detail": "Expediente archivado correctamente. El historial se conserva."}

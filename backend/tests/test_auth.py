@@ -94,6 +94,58 @@ async def test_logout_revokes_token(client, lawyer_user):
 
 
 @pytest.mark.asyncio
+async def test_account_lockout_after_max_attempts(client, lawyer_user):
+    from app.config import settings
+    # Agotar los intentos con password incorrecto
+    for _ in range(settings.LOGIN_MAX_ATTEMPTS):
+        r = await client.post(
+            "/api/auth/login",
+            json={"email": "lawyer@test.com", "password": "wrong"},
+        )
+        assert r.status_code in (401, 403)
+    # Ahora la cuenta está bloqueada: incluso el password correcto da 403
+    locked = await client.post(
+        "/api/auth/login",
+        json={"email": "lawyer@test.com", "password": "LawyerPass123!"},
+    )
+    assert locked.status_code == 403
+    assert "bloquead" in locked.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_reset_password_revokes_existing_sessions(client, db_session, lawyer_user):
+    from app.services.auth_service import AuthService
+    # Sesión activa
+    await login(client, "lawyer@test.com", "LawyerPass123!")
+    old_cookie = client.cookies.get("refresh_token")
+    assert old_cookie
+
+    # Generar token de reset y usarlo
+    reset_token = await AuthService.create_password_reset_token(db_session, lawyer_user.id)
+    resp = await client.post(
+        "/api/auth/reset-password",
+        json={"token": reset_token, "new_password": "NuevoPass456!"},
+    )
+    assert resp.status_code == 200
+
+    # El refresh token viejo quedó revocado
+    client.cookies.clear()
+    client.cookies.set("refresh_token", old_cookie)
+    refresh = await client.post("/api/auth/refresh")
+    assert refresh.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_login_timing_path_runs_for_unknown_user(client):
+    # No debe filtrar existencia: usuario inexistente devuelve 401 igual que password malo
+    r = await client.post(
+        "/api/auth/login",
+        json={"email": "nadie@test.com", "password": "loquesea"},
+    )
+    assert r.status_code == 401
+
+
+@pytest.mark.asyncio
 async def test_protected_endpoint_requires_access_token(client, lawyer_user):
     # Without bearer header → 401
     resp = await client.get("/api/cases/")

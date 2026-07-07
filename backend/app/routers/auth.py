@@ -24,10 +24,6 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 REFRESH_COOKIE_NAME = "refresh_token"
 REFRESH_COOKIE_PATH = "/api/auth"
 
-# In-Memory Lockout Trackers (Standard for MVP to avoid DB schema creep)
-FAILED_LOGINS = {}  # email -> count
-LOCKOUTS = {}       # email -> datetime
-
 
 def _set_refresh_cookie(response: Response, token: str) -> None:
     """Attach the refresh token as a hardened HttpOnly cookie."""
@@ -52,7 +48,7 @@ def _clear_refresh_cookie(response: Response) -> None:
 
 
 @router.post("/login", response_model=TokenResponse)
-@limiter.limit("5/15minute")  # 5 attempts per 15 mins per IP
+@limiter.limit("5/15minute")  # 5 attempts per 15 mins per IP (real IP via proxy-headers)
 async def login(
     request: Request,
     response: Response,
@@ -60,32 +56,42 @@ async def login(
     db: AsyncSession = Depends(get_db)
 ):
     email = credentials.email.lower()
+    now = datetime.utcnow()
 
-    # 1. Check if account is locked out
-    lockout_time = LOCKOUTS.get(email)
-    if lockout_time and lockout_time > datetime.utcnow():
-        remaining = int((lockout_time - datetime.utcnow()).total_seconds())
+    # 1. Look up the user
+    stmt = select(User).where(User.email == email)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+
+    # 2. Account lockout (persisted in DB — works across workers/restarts)
+    if user and user.locked_until and user.locked_until > now:
+        remaining = int((user.locked_until - now).total_seconds())
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Cuenta bloqueada temporalmente por excesivos intentos fallidos. Intente nuevamente en {remaining} segundos."
         )
 
-    # 2. Query user from DB
-    stmt = select(User).where(User.email == email)
-    result = await db.execute(stmt)
-    user = result.scalar_one_or_none()
+    # 3. Verify password. On the "user not found" path we still run a bcrypt
+    #    verify against a dummy hash so response time doesn't reveal existence.
+    if user:
+        password_ok = AuthService.verify_password(credentials.password, user.hashed_password)
+    else:
+        AuthService.dummy_verify(credentials.password)
+        password_ok = False
 
-    # 3. Handle login failures
-    if not user or not AuthService.verify_password(credentials.password, user.hashed_password):
-        FAILED_LOGINS[email] = FAILED_LOGINS.get(email, 0) + 1
-
-        if FAILED_LOGINS[email] >= 10:
-            LOCKOUTS[email] = datetime.utcnow() + timedelta(minutes=15)
-            FAILED_LOGINS[email] = 0
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Su cuenta ha sido bloqueada por 15 minutos debido a 10 intentos fallidos consecutivos."
-            )
+    if not password_ok:
+        # Increment the failure counter only for real accounts (bounded, no memory DoS).
+        if user:
+            user.failed_login_count = (user.failed_login_count or 0) + 1
+            if user.failed_login_count >= settings.LOGIN_MAX_ATTEMPTS:
+                user.locked_until = now + timedelta(minutes=settings.LOCKOUT_MINUTES)
+                user.failed_login_count = 0
+                await db.commit()
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Su cuenta ha sido bloqueada por {settings.LOCKOUT_MINUTES} minutos debido a demasiados intentos fallidos."
+                )
+            await db.commit()
 
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -99,9 +105,11 @@ async def login(
             detail="Cuenta de usuario inactiva o deshabilitada"
         )
 
-    # 5. Success! Reset failure counts and lockout
-    FAILED_LOGINS[email] = 0
-    LOCKOUTS.pop(email, None)
+    # 5. Success! Reset failure counters
+    if user.failed_login_count or user.locked_until:
+        user.failed_login_count = 0
+        user.locked_until = None
+        await db.commit()
 
     # 6. Generate Tokens
     access_token = AuthService.create_access_token(data={"sub": user.email, "role": user.role.value})
@@ -208,7 +216,12 @@ async def reset_password(
         )
 
     user.hashed_password = AuthService.hash_password(payload.new_password)
+    # A password reset is the primary account-recovery action: kill any lockout
+    # and revoke every existing session so a stolen refresh token can't survive it.
+    user.failed_login_count = 0
+    user.locked_until = None
     db.add(user)
     await db.commit()
+    await AuthService.revoke_all_user_tokens(db, user.id)
 
     return {"detail": "Contraseña actualizada correctamente"}

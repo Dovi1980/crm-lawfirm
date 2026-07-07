@@ -13,7 +13,7 @@ class EmailService:
         Sends a password reset link to the specified email address.
         If no SMTP configuration is available, logs the details in development mode.
         """
-        reset_link = f"http://localhost/reset-password?token={token}"
+        reset_link = f"{settings.BASE_URL.rstrip('/')}/reset-password?token={token}"
         
         subject = "Recuperación de Contraseña - CRM Estudio de Abogados"
         body_text = f"""

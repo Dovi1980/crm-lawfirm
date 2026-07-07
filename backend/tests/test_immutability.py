@@ -73,3 +73,48 @@ async def test_delete_request_returns_405(client, lawyer_user):
     token = await login(client, "lawyer@test.com", "LawyerPass123!")
     resp = await client.delete("/api/interactions/1", headers=auth_headers(token))
     assert resp.status_code in (404, 405)
+
+
+@pytest.mark.asyncio
+async def test_deleting_case_archives_and_preserves_interactions(client, db_session, admin_user):
+    """
+    Borrar un caso NO debe destruir sus interacciones (append-only por ley).
+    El endpoint DELETE hace soft-delete (archiva) y el historial se conserva.
+    """
+    from sqlalchemy import select, func
+    from app.models.client import Client, ClientType
+    from app.models.case import Case, CaseStatus, CaseType
+    from app.models.interaction import Interaction, InteractionType
+    from tests.conftest import login, auth_headers
+
+    cli = Client(first_name="C", last_name="D", client_type=ClientType.NATURAL, tax_id="20-9-9", is_active=True)
+    db_session.add(cli)
+    await db_session.commit(); await db_session.refresh(cli)
+
+    case = Case(
+        case_number="EXP-DEL-1", title="Para archivar", case_type=CaseType.CIVIL,
+        status=CaseStatus.NUEVO, client_id=cli.id, assigned_lawyer_id=admin_user.id,
+        created_by_id=admin_user.id,
+    )
+    db_session.add(case)
+    await db_session.commit(); await db_session.refresh(case)
+
+    inter = Interaction(
+        interaction_type=InteractionType.ESCRITO, description="gestión importante",
+        user_id=admin_user.id, case_id=case.id, client_id=cli.id, duration_minutes=10,
+    )
+    db_session.add(inter)
+    await db_session.commit()
+
+    token = await login(client, "admin@test.com", "AdminPass123!")
+    resp = await client.delete(f"/api/cases/{case.id}", headers=auth_headers(token))
+    assert resp.status_code == 200
+
+    # El caso sigue existiendo, archivado (refresh awaitea la IO async correctamente)
+    await db_session.refresh(case)
+    assert case.status == CaseStatus.ARCHIVADO
+    # La interacción NO fue borrada
+    count = (await db_session.execute(
+        select(func.count(Interaction.id)).where(Interaction.case_id == case.id)
+    )).scalar()
+    assert count == 1

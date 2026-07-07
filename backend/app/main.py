@@ -36,11 +36,32 @@ structlog.configure(
 )
 logger = structlog.get_logger()
 
+# --- Production startup guards -------------------------------------------------
+# Fail fast on insecure production configuration instead of silently shipping it.
+if settings.is_production:
+    problems = []
+    if not settings.COOKIE_SECURE:
+        problems.append("COOKIE_SECURE debe ser True en producción (HTTPS).")
+    if not settings.ENABLE_RATE_LIMITER:
+        problems.append("ENABLE_RATE_LIMITER debe ser True en producción.")
+    if settings.SECRET_KEY in ("", "changeme", "secret", "replace_this_with_a_64_character_hexadecimal_string_for_production"):
+        problems.append("SECRET_KEY inseguro/por defecto en producción.")
+    if problems:
+        raise RuntimeError(
+            "Arranque abortado por configuración insegura en producción:\n - "
+            + "\n - ".join(problems)
+        )
+
+# API docs are exposed only outside production to avoid leaking the attack surface.
+_docs_url = None if settings.is_production else "/api/docs"
+_openapi_url = None if settings.is_production else "/api/openapi.json"
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
-    docs_url="/api/docs",
-    openapi_url="/api/openapi.json"
+    docs_url=_docs_url,
+    redoc_url=None,
+    openapi_url=_openapi_url,
 )
 
 # Configure SlowAPI Rate Limiter State
